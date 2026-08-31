@@ -1,0 +1,11 @@
+{
+  "name": "node-fastify-open-redirect",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "witness": "node examples/witness.mjs"
+  },
+  "dependencies": {
+    "fastify": "5.12.1"
+  }
+}

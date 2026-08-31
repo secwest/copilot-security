@@ -6,6 +6,43 @@ All notable scanner, application, benchmark, and operational changes are recorde
 
 ### Scanner effectiveness
 
+- Added a bounded `node-fastify-open-redirect` model for production Fastify 5
+  shorthand routes. It proves exact runtime dependency and official factory
+  provenance, a stable application, literal route registration, exact
+  request/reply identity, query/parameter/body provenance, and argument-zero
+  flow into `reply.redirect(destination[, status])` and the Location header.
+- Preserved root-only-prefix and substring-guard bypasses as CWE-601 candidates.
+  Fixed non-root local prefixes, complete fixed authorities, static
+  destinations, and stable fail-closed local Set allowlists remain controls;
+  opaque transformations, mutated allowlists, Fastify 4, status-first calls,
+  dynamic routes, API rebindings, unresolved/dev-only dependencies, tests, and
+  framework lookalikes fail closed.
+- Added 25 focused regressions with 43 assertions and an exact Fastify 5.12.1
+  exploit/control fixture pair. No-network witnesses prove that a root-only
+  prefix selects `attacker.invalid`, while percent-encoding beneath
+  `/continue/` remains same-origin. The canonical benchmark advances to 206
+  pairs, 412 cases, and 1,236 repeated scan positions.
+- The expanded suite exercises 2,252 tests across 220 files: 2,221 pass and 31
+  intentionally skip after the corrected corpus-count guard and native reruns
+  of the two established managed-sandbox Git/Windows-state cases. The aggregate
+  executes 17,318 assertions. TypeScript, generated-model drift, the production
+  build, canonical benchmark integrity, both witnesses, and the focused model
+  contract are green.
+- Two npm archives are byte-identical at 2,477,934 bytes with 299 entries and
+  SHA-256
+  `a53a15628e08c52b07710f64e127e49937ba8d80c662fa197b153ddbd61845e7`;
+  installed-package inspection validates the public API, CLI, and all 79
+  bundled plugin files. The warning-free Windows build passes 7/7 core and 3/3
+  shared tests; its fresh 346,796-byte executable has SHA-256
+  `ab7afa575e79b6d6987526b01dfc4f84167e1eea20ec1427f856e1d9c05d2c6a`.
+  Ubuntu/WSL passes the same tests plus 2/2 Linux UI tests and non-graphical and
+  Xvfb startup; its 72,568-byte executable has SHA-256
+  `7e29d642169a6c218c249216c6c10648307aea88faf636b69ac25741104b4adf`.
+- Two whole-repository deterministic inventories are byte-identical at 256
+  rows and 639,231 bytes with SHA-256
+  `93aeb23da9a10f70803d1ab3e0d1a6fc2d06bf963d5434f03140085a38c8764f`.
+  Exactly one Fastify row identifies the intentional exploit fixture at source
+  line 6 and sink line 7; the topology-matched safe fixture is absent.
 - Closed a measured Node/Express server-side open-redirect false negative. The
   unchanged inventory emitted no row for an exact Express 5 route that passed
   `req.query.next` through `"/" + value` to `res.redirect`; the new focused

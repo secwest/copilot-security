@@ -7,6 +7,30 @@ that dissimilar products can be reduced to one score.
 
 The latest comparator adoption starts from CodeQL's maintained
 [`js/server-side-unvalidated-url-redirection`](https://codeql.github.com/codeql-query-help/javascript/js-server-side-unvalidated-url-redirection/)
+boundary and Fastify's maintained
+[`Request`](https://fastify.dev/docs/latest/Reference/Request/) and
+[`Reply`](https://fastify.dev/docs/latest/Reference/Reply/) contracts. Copilot
+Security now requires exact Fastify 5 production provenance, an official
+factory and stable application, a literal shorthand route, registered-handler
+request/reply identity, and argument-zero flow from a literal query, parameter,
+or body field into `reply.redirect(destination[, status])`. Fastify's
+[v5 migration guide](https://github.com/fastify/fastify/blob/main/docs/Guides/Migration-Guide-V5.md)
+establishes the removed status-first overload, which remains a negative case.
+The model does not impose Express's separate body-parser middleware rule because
+Fastify supplies supported parsed bodies on its request object.
+
+The destination policy matches the stronger existing redirect controls: a
+root-only prefix and substring host check remain bypassable; fixed non-root
+local prefixes, complete fixed authorities, and immutable fail-closed local
+destination Sets are controls. Opaque transforms and mutated Sets do not earn
+safety. The pinned Fastify 5.12.1 pair proves the authority differential with
+fixed synthetic values and no network I/O, while focused tests cover module,
+route, handler, argument-role, version, dependency, identity, and replacement
+boundaries. This extends the CodeQL idea with framework activation and exact
+runtime proof rather than duplicating its generic taint result.
+
+The preceding comparator adoption starts from CodeQL's maintained
+[`js/server-side-unvalidated-url-redirection`](https://codeql.github.com/codeql-query-help/javascript/js-server-side-unvalidated-url-redirection/)
 boundary and its
 [`js/incomplete-url-substring-sanitization`](https://codeql.github.com/codeql-query-help/javascript/js-incomplete-url-substring-sanitization/)
 Express example. Copilot Security requires exact Express 4/5 production

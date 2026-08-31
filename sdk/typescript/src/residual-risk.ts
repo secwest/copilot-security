@@ -4701,6 +4701,23 @@ const NODE_EXPRESS_OPEN_REDIRECT_FIELD_EVIDENCE_REQUIREMENTS = [
   ["CWE-601", "open redirect", "URL redirection"],
 ] as const;
 
+const NODE_FASTIFY_OPEN_REDIRECT_FIELD_EVIDENCE_REQUIREMENTS = [
+  ["Fastify 5", "Fastify application", "route shorthand", "registered route"],
+  [
+    "request.query",
+    "request.params",
+    "request.body",
+    "query string",
+    "route parameter",
+    "request body",
+    "remote input",
+  ],
+  ["reply.redirect", "Location header", "redirect location", "argument zero"],
+  ["absolute URL", "origin", "scheme-relative", "attacker-selected host"],
+  ["root-only prefix", "fixed local prefix", "exact allowlist", "same-origin"],
+  ["CWE-601", "open redirect", "URL redirection"],
+] as const;
+
 const NODE_MCP_TOOL_SSRF_FIELD_EVIDENCE_REQUIREMENTS = [
   ["MCP tool", "registerTool", "server.tool", "tool callback"],
   ["tool input", "callback input", "LLM-controlled", "client-controlled"],
@@ -4835,6 +4852,13 @@ const MODEL_SPECIFIC_FINDING_REQUIREMENTS: ReadonlyMap<
     {
       validation: NODE_EXPRESS_OPEN_REDIRECT_FIELD_EVIDENCE_REQUIREMENTS,
       attackPath: NODE_EXPRESS_OPEN_REDIRECT_FIELD_EVIDENCE_REQUIREMENTS,
+    },
+  ],
+  [
+    "node-fastify-open-redirect",
+    {
+      validation: NODE_FASTIFY_OPEN_REDIRECT_FIELD_EVIDENCE_REQUIREMENTS,
+      attackPath: NODE_FASTIFY_OPEN_REDIRECT_FIELD_EVIDENCE_REQUIREMENTS,
     },
   ],
   [
@@ -5173,6 +5197,7 @@ export async function buildResidualRiskInventory(
   records.push(...nodeContentfulMcpManagementTokenLeakRecords(sourceFiles));
   records.push(...nodeNextJsDynamicRouteAuthorizationRecords(sourceFiles));
   records.push(...nodeExpressOpenRedirectRecords(sourceFiles));
+  records.push(...nodeFastifyOpenRedirectRecords(sourceFiles));
   records.push(...nodePlateMediaEmbedXssRecords(sourceFiles));
   records.push(...nodeDefuddleExtractorXssRecords(sourceFiles));
   records.push(...nodePickemTerminalInjectionRecords(sourceFiles));
@@ -25690,6 +25715,401 @@ function nodeExpressOpenRedirectRecords(
                   cweIds: ["CWE-601"],
                 },
                 propagators,
+                candidateControls,
+              },
+            });
+            if (records.length >= MAX_FRAMEWORK_CROSS_FILE_RECORDS)
+              return records;
+          }
+        }
+      }
+    }
+  }
+  return records;
+}
+
+interface NodeFastifyFactoryBinding {
+  line: number;
+  local: string;
+}
+
+interface NodeFastifyInstanceBinding {
+  factoryLine: number;
+  line: number;
+  local: string;
+}
+
+function nodeFastifyFactoryBindings(
+  lines: readonly string[],
+): NodeFastifyFactoryBinding[] {
+  const bindings: NodeFastifyFactoryBinding[] = [];
+  for (let index = 0; index < lines.length; index += 1) {
+    const code = javascriptCodeBeforeComment(lines[index] ?? "");
+    const defaultImport =
+      /^\s*import\s+([A-Za-z_$][\w$]*)\s+from\s+["']fastify["']/u.exec(code);
+    const namedImport =
+      /^\s*import\s*\{\s*fastify(?:\s+as\s+([A-Za-z_$][\w$]*))?\s*\}\s*from\s*["']fastify["']/u.exec(
+        code,
+      );
+    const importEquals =
+      /^\s*import\s+([A-Za-z_$][\w$]*)\s*=\s*require\s*\(\s*["']fastify["']\s*\)/u.exec(
+        code,
+      );
+    const requireBinding =
+      /^\s*const\s+([A-Za-z_$][\w$]*)\s*=\s*require\s*\(\s*["']fastify["']\s*\)\s*;?\s*$/u.exec(
+        code,
+      );
+    const local =
+      defaultImport?.[1] ??
+      (namedImport === null ? undefined : namedImport[1] ?? "fastify") ??
+      importEquals?.[1] ??
+      requireBinding?.[1];
+    if (local !== undefined) bindings.push({ line: index + 1, local });
+  }
+  return bindings;
+}
+
+function nodeFastifyInstanceBindings(
+  lines: readonly string[],
+): NodeFastifyInstanceBinding[] {
+  const factories = nodeFastifyFactoryBindings(lines);
+  const bindings: NodeFastifyInstanceBinding[] = [];
+  for (let index = 0; index < lines.length; index += 1) {
+    const code = javascriptCodeBeforeComment(lines[index] ?? "");
+    const direct =
+      /^\s*const\s+([A-Za-z_$][\w$]*)\s*=\s*require\s*\(\s*["']fastify["']\s*\)\s*\(\s*(?:\{[\s\S]*\})?\s*\)\s*;?\s*$/u.exec(
+        code,
+      );
+    if (direct?.[1] !== undefined) {
+      bindings.push({
+        factoryLine: index + 1,
+        line: index + 1,
+        local: direct[1],
+      });
+      continue;
+    }
+    for (const factory of factories) {
+      if (
+        factory.line >= index + 1 ||
+        javascriptIdentifierReassignedBetween(
+          lines,
+          factory.local,
+          factory.line,
+          index + 1,
+        )
+      ) {
+        continue;
+      }
+      const instance = new RegExp(
+        `^\\s*const\\s+([A-Za-z_$][\\w$]*)\\s*=\\s*${escapeRegularExpression(factory.local)}\\s*\\(\\s*(?:\\{[\\s\\S]*\\})?\\s*\\)\\s*;?\\s*$`,
+        "u",
+      ).exec(code);
+      if (instance?.[1] === undefined) continue;
+      bindings.push({
+        factoryLine: factory.line,
+        line: index + 1,
+        local: instance[1],
+      });
+    }
+  }
+  return bindings.filter(
+    (binding, index, all) =>
+      all.findIndex(
+        (candidate) =>
+          candidate.local === binding.local && candidate.line === binding.line,
+      ) === index,
+  );
+}
+
+function nodeFastifySourcePatterns(request: string): FrameworkModelPattern[] {
+  const escaped = escapeRegularExpression(request);
+  const property =
+    "(?:\\.\\s*[A-Za-z_$][\\w$]*|\\[\\s*[\"'][^\"']+[\"']\\s*\\])";
+  return [
+    {
+      kind: "fastify-request-query-string",
+      expression: new RegExp(
+        `\\b${escaped}\\s*\\.\\s*query\\s*${property}`,
+        "u",
+      ),
+    },
+    {
+      kind: "fastify-request-route-parameter",
+      expression: new RegExp(
+        `\\b${escaped}\\s*\\.\\s*params\\s*${property}`,
+        "u",
+      ),
+    },
+    {
+      kind: "fastify-request-body-field",
+      expression: new RegExp(
+        `\\b${escaped}\\s*\\.\\s*body\\s*${property}`,
+        "u",
+      ),
+    },
+  ];
+}
+
+function nodeFastifyRedirectTarget(
+  arguments_: readonly string[],
+): string | undefined {
+  if (arguments_.length === 1) return arguments_[0]?.trim();
+  if (
+    arguments_.length === 2 &&
+    /^[1-5]\d\d$/u.test(arguments_[1]?.trim() ?? "")
+  ) {
+    return arguments_[0]?.trim();
+  }
+  return undefined;
+}
+
+function nodeFastifyOpenRedirectRecords(
+  files: readonly SourceFileSnapshot[],
+): ResidualRiskRecord[] {
+  const records: ResidualRiskRecord[] = [];
+  const emitted = new Set<string>();
+  for (const file of files) {
+    if (
+      !JAVASCRIPT_EXTENSIONS.has(file.extension) ||
+      javascriptTestOrExamplePath(file.path)
+    ) {
+      continue;
+    }
+    const dependency = nodeRuntimeDependency(files, file.path, "fastify");
+    const majorVersion = Number(dependency?.version.split(".")[0]);
+    if (dependency === undefined || majorVersion !== 5) continue;
+    const structural = javascriptStructuralLines(file.lines).join("\n");
+    for (const instance of nodeFastifyInstanceBindings(file.lines)) {
+      const escapedInstance = escapeRegularExpression(instance.local);
+      const routeCallee = new RegExp(
+        `\\b${escapedInstance}\\s*\\.\\s*(?:all|delete|get|head|options|patch|post|put)\\s*\\(`,
+        "u",
+      );
+      for (const route of javascriptCallsInText(
+        file.text,
+        structural,
+        1,
+        routeCallee,
+      )) {
+        if (
+          route.line <= instance.line ||
+          nodeStaticString(route.arguments[0]) === undefined
+        ) {
+          continue;
+        }
+        if (
+          javascriptIdentifierReassignedBetween(
+            file.lines,
+            instance.local,
+            instance.line,
+            route.line,
+          ) ||
+          file.lines
+            .slice(instance.line, route.line - 1)
+            .some((line) =>
+              new RegExp(
+                `\\b${escapedInstance}\\s*\\.\\s*(?:all|delete|get|head|options|patch|post|put)\\s*=`,
+                "u",
+              ).test(javascriptCodeBeforeComment(line)),
+            )
+        ) {
+          continue;
+        }
+        const routeEndLine =
+          1 + (structural.slice(0, route.close).match(/\n/gu)?.length ?? 0);
+        for (const handlerArgument of route.arguments.slice(1)) {
+          const inline = nodeExpressHandlerParameters(handlerArgument);
+          const named = /^[A-Za-z_$][\w$]*$/u.test(handlerArgument.trim())
+            ? nodeExpressNamedHandler(
+                file.lines,
+                handlerArgument.trim(),
+                route.line,
+              )
+            : undefined;
+          const handler: NodeExpressHandlerScope | undefined =
+            inline === undefined
+              ? named
+              : {
+                  ...inline,
+                  endLine: routeEndLine,
+                  startLine: route.line,
+                };
+          if (handler === undefined) continue;
+          if (
+            handler.symbol !== undefined &&
+            javascriptIdentifierReassignedBetween(
+              file.lines,
+              handler.symbol,
+              handler.startLine,
+              route.line,
+            )
+          ) {
+            continue;
+          }
+          const escapedReply = escapeRegularExpression(handler.response);
+          const handlerLines = file.lines.slice(
+            handler.startLine - 1,
+            handler.endLine,
+          );
+          const handlerText = handlerLines.join("\n");
+          const handlerStructural =
+            javascriptStructuralLines(handlerLines).join("\n");
+          const sourcePatterns = nodeFastifySourcePatterns(handler.request);
+          const sources = matchingJavascriptModelLines(
+            file.lines,
+            sourcePatterns,
+            16,
+          ).filter(
+            ({ line }) => line >= handler.startLine && line <= handler.endLine,
+          );
+          for (const redirect of javascriptCallsInText(
+            handlerText,
+            handlerStructural,
+            handler.startLine,
+            new RegExp(`\\b${escapedReply}\\s*\\.\\s*redirect\\s*\\(`, "u"),
+          )) {
+            const target = nodeFastifyRedirectTarget(redirect.arguments);
+            if (target === undefined || target === "") continue;
+            if (
+              /^\s*[A-Za-z_$][\w$]*(?:\s*\.\s*[A-Za-z_$][\w$]*)*\s*\(/u.test(
+                target,
+              )
+            ) {
+              continue;
+            }
+            const redirectPrefix = handlerStructural.slice(0, redirect.start);
+            if (
+              nodeExpressBindingAssignedInText(
+                redirectPrefix,
+                handler.request,
+              ) ||
+              nodeExpressBindingAssignedInText(
+                redirectPrefix,
+                handler.response,
+              ) ||
+              new RegExp(
+                `\\b${escapedReply}\\s*\\.\\s*redirect\\s*=`,
+                "u",
+              ).test(redirectPrefix) ||
+              javascriptIdentifierReassignedBetween(
+                file.lines,
+                handler.request,
+                handler.startLine,
+                redirect.line,
+              ) ||
+              javascriptIdentifierReassignedBetween(
+                file.lines,
+                handler.response,
+                handler.startLine,
+                redirect.line,
+              ) ||
+              file.lines
+                .slice(handler.startLine - 1, redirect.line - 1)
+                .some((line) =>
+                  new RegExp(
+                    `\\b${escapedReply}\\s*\\.\\s*redirect\\s*=`,
+                    "u",
+                  ).test(javascriptCodeBeforeComment(line)),
+                )
+            ) {
+              continue;
+            }
+            const source = nodeExpressModeledRedirectSource(
+              file.lines,
+              sources,
+              redirect.line,
+              target,
+              sourcePatterns,
+            );
+            if (
+              source === undefined ||
+              nodeExpressFixedDestinationPrefix(
+                file.lines,
+                target,
+                redirect.line,
+              ) ||
+              nodeExpressFailClosedLocalAllowlist(
+                file.lines,
+                target,
+                source.line,
+                redirect.line,
+              ) !== undefined
+            ) {
+              continue;
+            }
+            const key = `${file.path}\0${source.line}\0${redirect.line}`;
+            if (emitted.has(key)) continue;
+            emitted.add(key);
+            const startLine = Math.max(1, redirect.line - CONTEXT_LINES_BEFORE);
+            const endLine = Math.min(
+              file.lines.length,
+              redirect.line + CONTEXT_LINES_AFTER,
+            );
+            const candidateControls = nodeExpressCandidateControls(
+              file.lines,
+              source.line,
+              redirect.line,
+              target,
+            ).map((control) => ({ ...control, path: file.path }));
+            records.push({
+              path: file.path,
+              line: redirect.line,
+              categories: [
+                "framework-dataflow:node-fastify-open-redirect",
+                `modeled-source:${source.kind}`,
+                "modeled-sink:fastify-reply-redirect-location",
+              ],
+              priority: 114,
+              startLine,
+              endLine,
+              excerpt: sourceExcerpt(file.lines, startLine, endLine),
+              sourceExcerpt: sourceExcerpt(
+                file.lines,
+                Math.max(1, source.line - 1),
+                Math.min(file.lines.length, source.line + 1),
+              ),
+              frameworkModel: {
+                schemaVersion: "1.2",
+                id: "node-fastify-open-redirect",
+                language: "javascript-typescript",
+                scope: "same-file",
+                source: {
+                  kind: source.kind,
+                  path: file.path,
+                  line: source.line,
+                },
+                sink: {
+                  kind: "fastify-reply-redirect-location",
+                  path: file.path,
+                  line: redirect.line,
+                  cweIds: ["CWE-601"],
+                },
+                propagators: [
+                  {
+                    kind: "fastify-factory-binding",
+                    path: file.path,
+                    line: instance.factoryLine,
+                    symbol: instance.local,
+                  },
+                  {
+                    kind: "fastify-literal-route-registration",
+                    path: file.path,
+                    line: route.line,
+                    symbol: nodeStaticString(route.arguments[0]),
+                  },
+                  {
+                    kind: "fastify-handler-request-reply-binding",
+                    path: file.path,
+                    line: handler.startLine,
+                    symbol: `${handler.request},${handler.response}`,
+                  },
+                  {
+                    kind: "fastify-runtime-dependency",
+                    path: dependency.manifestPath,
+                    line: dependency.line,
+                    symbol: `fastify@${dependency.version}:${dependency.proof}`,
+                  },
+                ],
                 candidateControls,
               },
             });

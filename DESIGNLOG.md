@@ -2,6 +2,74 @@
 
 This log records consequential implementation decisions, their evidence, and the tradeoffs that future scanner work must preserve.
 
+## 2026-08-31 — Bind Fastify redirects to argument zero and registered routes
+
+**Comparator and scope.** CodeQL's maintained JavaScript server-side redirect
+query defines the CWE-601 boundary as remote data reaching a redirect, and its
+incomplete-substring query demonstrates why text containment is not host
+authorization. Fastify's current request reference exposes `query`, `params`,
+and natively parsed `body` fields, while its Fastify 5 reply contract defines
+`redirect(destination[, status])`; the migration guide explicitly removes the
+older status-first signature. The existing host had no exact Fastify redirect
+row for that source/sink path. This increment adopts the comparator behavior
+without converting arbitrary `redirect` method names into sinks.
+
+**Typed decision.** Emit `node-fastify-open-redirect` only with an exact
+production Fastify 5 dependency and an official default, named `fastify`,
+import-equals, CommonJS, or direct-require factory. Require a stable application,
+a literal shorthand route, a registered inline or uniquely resolved named
+handler, and unchanged request/reply identities. Follow a literal
+`request.query`, `request.params`, or `request.body` field directly, through one
+assignment, or through one bounded fixed-string concatenation into argument
+zero of the same reply's `redirect` call. Unlike Express, supported request
+bodies need no separately registered framework parser.
+
+**Precision boundary.** Root-only prefixing remains unsafe because an input
+beginning with `/` yields a scheme-relative Location and selects another
+authority. Fixed non-root local prefixes and complete fixed authorities close
+that construction. A local allowlist suppresses only when one unreassigned,
+unmutated uppercase Set contains at least two fixed local destinations and a
+direct pre-sink return/throw rejects nonmembers. Substring checks and mutated
+sets remain reviewer evidence, not sanitizers. Opaque call-wrapped transforms,
+Fastify 4, status-first or malformed overloads, dynamic routes, unregistered or
+late handlers, rebound factories/applications/request/reply values, replaced
+route or redirect methods, static destinations, dev-only or unresolved
+dependencies, tests/examples, and local lookalikes fail closed.
+
+**Executable evidence.** A pinned Fastify 5.12.1 pair shares the same literal
+route and query-to-redirect topology. Its no-network positive witness resolves
+the root-prefixed synthetic input to `https://attacker.invalid`; its control
+percent-encodes the same shape below `/continue/` and remains on
+`https://scanner.invalid`. Twenty-five focused tests pass 43 assertions across
+ESM, CommonJS, named factories and handlers, route options, all three request
+collections, overload roles, weak and strong controls, dependency boundaries,
+identity mutation, method replacement, activation, and lookalike cases. The
+first focused run caught an opaque `sanitize(request.query.next)` false positive;
+an explicit call-wrapper rejection closed it before corpus admission.
+
+**Regression evidence.** Canonical pairing and semantic gates pass with 206
+exploit/control pairs, 412 cases, and 1,236 repeated scan positions. The full
+suite executes 2,252 tests across 220 files and 17,318 assertions: 2,221 pass
+and 31 intentionally skip after correcting the explicit corpus count and
+rerunning two unchanged managed-sandbox Git/Windows-state cases natively.
+Generated-model drift, TypeScript, the production build, and both witnesses
+pass. Two npm archives are byte-identical at 2,477,934 bytes with 299 entries
+and SHA-256
+`a53a15628e08c52b07710f64e127e49937ba8d80c662fa197b153ddbd61845e7`;
+installed-package inspection validates the public API, CLI, and all 79 bundled
+plugin files. Windows builds without warnings and passes 7/7 core plus 3/3
+shared tests; the fresh 346,796-byte executable has SHA-256
+`ab7afa575e79b6d6987526b01dfc4f84167e1eea20ec1427f856e1d9c05d2c6a`.
+Ubuntu/WSL builds without warnings, passes the same suites plus 2/2 headless
+tests, and passes non-graphical and Xvfb startup; its 72,568-byte executable has
+SHA-256
+`7e29d642169a6c218c249216c6c10648307aea88faf636b69ac25741104b4adf`.
+Two repository inventories are byte-identical at 256 rows and 639,231 bytes
+with SHA-256
+`93aeb23da9a10f70803d1ab3e0d1a6fc2d06bf963d5434f03140085a38c8764f`;
+only the intentional Fastify exploit fixture emits the new row. The continuing
+effectiveness goal remains active.
+
 ## 2026-08-31 — Prove Express redirect reachability and destination control
 
 **Measured gap and comparator.** An exact production Express 5 application

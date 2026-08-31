@@ -1,0 +1,77 @@
+{
+  "schemaVersion": "1.0",
+  "thresholds": {
+    "minCompletionRate": 1,
+    "minPrecision": 1,
+    "minRecall": 1,
+    "minF1": 1,
+    "minCasePassRate": 1,
+    "minNegativeCasePassRate": 1,
+    "minStableDetectionRate": 1,
+    "minValidationRate": 1,
+    "minAttackPathRate": 1,
+    "minCodeEvidenceRate": 1,
+    "minSeverityAccuracy": 1,
+    "maxFalsePositivesPerRun": 0
+  },
+  "cases": [
+    {
+      "id": "node-fastify-open-redirect",
+      "description": "A Fastify 5 query value receives only a root slash prefix and becomes a scheme-relative attacker-selected Location.",
+      "fixture": "fixtures/node-fastify-open-redirect",
+      "findingsPaths": ["node-fastify-open-redirect/run-1/findings.json"],
+      "expected": [
+        {
+          "id": "node-fastify-open-redirect",
+          "cwe": ["CWE-601"],
+          "locations": [
+            {
+              "path": "src/server.js",
+              "startLine": 7,
+              "endLine": 7,
+              "lineTolerance": 1
+            }
+          ],
+          "acceptableSeverities": ["high", "medium"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true,
+          "requiredValidationTextAnyOf": [
+            ["Fastify 5", "fastify@5.12.1", "Fastify version"],
+            ["GET /continue", "app.get", "literal route"],
+            ["request.query", "query field", "query string"],
+            ["reply.redirect", "argument zero", "redirect-to-Location"],
+            ["root-only prefix", "scheme-relative", "double slash"],
+            ["fixed local prefix", "allowlist", "same-origin"],
+            ["CWE-601", "open redirect"]
+          ],
+          "requiredAttackPathTextAnyOf": [
+            ["GET /continue", "app.get", "Fastify route"],
+            ["request.query.next", "request.query", "query value"],
+            ["root-only prefix", "\"/\" + target", "double slash"],
+            ["reply.redirect", "argument zero", "Location"],
+            ["attacker.invalid", "attacker-selected origin", "external origin"],
+            ["no network request", "does not follow", "URL resolution only"]
+          ],
+          "forbiddenText": [
+            "the witness contacted attacker.invalid",
+            "proves the endpoint is publicly reachable",
+            "proves credentials were stolen",
+            "proves OAuth tokens were stolen",
+            "proves phishing succeeded",
+            "every Fastify redirect is vulnerable",
+            "a fixed local prefix is an open redirect",
+            "the host is fully compromised"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "node-fastify-safe-local-redirect",
+      "description": "The topology-matched control percent-encodes the same hostile value beneath a non-root fixed local redirect target.",
+      "fixture": "fixtures/node-fastify-safe-local-redirect",
+      "findingsPaths": ["node-fastify-safe-local-redirect/run-1/findings.json"],
+      "expected": []
+    }
+  ]
+}
