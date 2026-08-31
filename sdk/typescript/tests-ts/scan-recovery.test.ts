@@ -2508,7 +2508,7 @@ describe("malformed scan artifact recovery", () => {
     }
   });
 
-  test("normalizes line aliases and re-anchors snippets from repository bytes", async () => {
+  test("rejects a model-authored excerpt that does not match its claimed repository lines", async () => {
     const fixture = await startDraftScan();
     const path = join(fixture.scanDir, "findings.json");
     const document = await readJson<FindingsDocument>(path);
@@ -2531,9 +2531,101 @@ describe("malformed scan artifact recovery", () => {
     const completed = await completeScan(fixture);
 
     expect(completed.progress.status).toBe("complete");
+    expect(completed.findingCount).toBe(0);
     expect(completed.warnings).toContain(
-      "Recovered finding 1: re-anchored 1 code-evidence excerpt from repository bytes.",
+      "Discarded finding 1: 1 repository-mismatched code-evidence item.",
     );
+  });
+
+  test("fails closed when vulnerable and control evidence paths are transposed", async () => {
+    const fixture = await startDraftScan();
+    const vulnerablePath = join(fixture.repository, "src", "vulnerable.js");
+    const controlPath = join(fixture.repository, "src", "control.js");
+    await writeFile(
+      vulnerablePath,
+      'return reply.redirect("/" + request.query.next);\n',
+    );
+    await writeFile(
+      controlPath,
+      'return reply.redirect("/continue/" + encodeURIComponent(request.query.next));\n',
+    );
+
+    const path = join(fixture.scanDir, "findings.json");
+    const document = await readJson<FindingsDocument>(path);
+    const finding = document.findings[0]!;
+    finding.locations = [
+      { path: "src/control.js", startLine: 1, endLine: 1, role: "sink" },
+    ];
+    finding.codeEvidence = [
+      {
+        id: "redirect-sink",
+        label: "Redirect sink",
+        path: "src/control.js",
+        startLine: 1,
+        endLine: 1,
+        role: "sink",
+        code: 'return reply.redirect("/" + request.query.next);',
+        explanation: "The request value controls the redirect authority.",
+      },
+      {
+        id: "encoded-control",
+        label: "Encoded control",
+        path: "src/vulnerable.js",
+        startLine: 1,
+        endLine: 1,
+        role: "control",
+        code: 'return reply.redirect("/continue/" + encodeURIComponent(request.query.next));',
+        explanation: "The request value remains one encoded path segment.",
+      },
+    ];
+    finding["rootCause"] = {
+      summary:
+        "The redirect destination retains an attacker-controlled authority.",
+      evidenceRefs: ["redirect-sink"],
+    };
+    finding["validation"] = {
+      summary: "The vulnerable sibling leaves slash characters unencoded.",
+      evidenceRefs: ["redirect-sink", "encoded-control"],
+    };
+    finding["attackPath"] = {
+      summary: "A request value reaches the redirect destination.",
+      evidenceRefs: ["redirect-sink"],
+    };
+    await writeJson(path, document);
+
+    const completed = await completeScan(fixture);
+
+    expect(completed.progress.status).toBe("complete");
+    expect(completed.findingCount).toBe(0);
+    expect(completed.warnings).toContain(
+      "Discarded finding 1: 2 repository-mismatched code-evidence items.",
+    );
+  });
+
+  test("accepts only line-ending and surrounding-whitespace evidence differences", async () => {
+    const fixture = await startDraftScan();
+    const path = join(fixture.scanDir, "findings.json");
+    const document = await readJson<FindingsDocument>(path);
+    const finding = document.findings[0]!;
+    finding.locations = [
+      { path: "src/extract.py", startLine: 1, endLine: 1, role: "sink" },
+    ] as unknown as Finding["locations"];
+    finding.codeEvidence = [
+      {
+        id: "repository-sink",
+        label: "Repository sink",
+        path: "src/extract.py",
+        line: 1,
+        code: "  # fixture\r\n",
+        explanation: "The cited repository line is security relevant.",
+      },
+    ] as unknown as NonNullable<Finding["codeEvidence"]>;
+    await writeJson(path, document);
+
+    const completed = await completeScan(fixture);
+
+    expect(completed.progress.status).toBe("complete");
+    expect(completed.findingCount).toBe(1);
     const recovered = (await readJson<FindingsDocument>(path)).findings[0]!;
     expect(recovered.codeEvidence?.[0]).toMatchObject({
       id: "repository-sink",

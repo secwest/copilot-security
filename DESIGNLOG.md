@@ -2,6 +2,69 @@
 
 This log records consequential implementation decisions, their evidence, and the tradeoffs that future scanner work must preserve.
 
+## 2026-08-31 — Discard findings whose evidence contradicts repository bytes
+
+**Measured failure.** The live Fastify acceptance scan reviewed the two changed
+scanner files and the topology-matched exploit/control fixtures from immutable
+public commit `146a895f9599e230e57b9eafef70798a6418c473`. It produced one nominal
+medium CWE-601 finding, but attached the vulnerable
+`reply.redirect("/" + target)` expression to the encoded safe fixture and
+attached the safe explanation to the vulnerable fixture. The inversion was
+already present in the candidate and validation ledgers. The former finalizer
+then copied bytes from both claimed line ranges, warned that it had re-anchored
+two excerpts, and published the unchanged high-confidence conclusion. All 10
+manifest artifact hashes independently recompute, so cryptographic sealing
+correctly proves byte integrity but cannot prove that model-authored semantics
+match those bytes.
+
+**Integrity decision.** Finalization may normalize only CRLF/CR line endings
+and surrounding whitespace before comparing model-authored code evidence with
+the exact claimed repository lines. A substantive mismatch now discards the
+entire finding. Retaining other evidence rows, rewriting the mismatched row, or
+merely dropping that row is unsafe: the public schema permits absent or empty
+`codeEvidence`, and explanations, validation, attack paths, severity, and
+confidence may all depend on the transposed meaning. The model gets bounded
+repair opportunities before finalization; the final host boundary is an
+accept-or-quarantine check, not a semantic author.
+
+**Regression evidence.** Three focused cases prove that a single paraphrased
+excerpt and a two-way vulnerable/control transposition yield zero findings,
+while line-ending and surrounding-whitespace differences retain the exact
+repository excerpt. The complete 87-case scan-recovery suite passes 496
+assertions. The complete product suite runs 2,254 tests across 220 files and
+17,328 assertions: 2,221 pass in the managed environment, 31 intentionally
+skip, and the two established environment-sensitive Git-fixture and Windows
+home-ACL cases pass unchanged when rerun natively, for 2,223 logical passes.
+Formatting, generated-model drift, TypeScript, and the production build pass.
+Two 299-entry npm archives are byte-identical at 2,478,273 bytes with SHA-256
+`b9b57c57b7d531b4682104436fa66962badbec3d529714418bc2c4052258ca99`;
+an isolated install validates the public API, CLI, 67 installed packages, and
+all 79 bundled plugin files.
+
+**Operational evidence.** The authenticated `gpt-5.6-sol` high-reasoning scan
+completed one session in 29m03s with complete review of four immutable paths,
+no deferred work, and no retry, classifier refusal, quota, authentication,
+rate-limit, credit-limit, or transport failure. It consumed 3,488,060 input
+tokens, including 2,686,763 cached, and 59,655 output tokens at a $8.10656525
+metered estimate. The scanner therefore found its own evidence-integrity gap
+without encountering an allowance ceiling. The continuing effectiveness goal
+remains active: this increment improves false-positive resistance and does not
+declare the scanner finished.
+
+**Hosted baseline.** All 11 workflow families passed at the exact Fastify
+implementation checkpoint: [Node `33412876825`](https://github.com/secwest/copilot-security/actions/runs/33412876825)
+with 92/92 successful jobs,
+[container `33412876669`](https://github.com/secwest/copilot-security/actions/runs/33412876669),
+[Linux GUI `33412876755`](https://github.com/secwest/copilot-security/actions/runs/33412876755),
+[Windows GUI `33412876757`](https://github.com/secwest/copilot-security/actions/runs/33412876757),
+[Java `33412876698`](https://github.com/secwest/copilot-security/actions/runs/33412876698),
+[PHP `33412876707`](https://github.com/secwest/copilot-security/actions/runs/33412876707),
+[Ruby `33412876730`](https://github.com/secwest/copilot-security/actions/runs/33412876730),
+[Rust `33412876719`](https://github.com/secwest/copilot-security/actions/runs/33412876719),
+[Go `33412876749`](https://github.com/secwest/copilot-security/actions/runs/33412876749),
+[.NET `33412876726`](https://github.com/secwest/copilot-security/actions/runs/33412876726),
+and [Kotlin `33412876797`](https://github.com/secwest/copilot-security/actions/runs/33412876797).
+
 ## 2026-08-31 — Bind Fastify redirects to argument zero and registered routes
 
 **Comparator and scope.** CodeQL's maintained JavaScript server-side redirect

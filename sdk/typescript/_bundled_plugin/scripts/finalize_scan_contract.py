@@ -3517,7 +3517,15 @@ def _ground_standalone_findings_evidence(
     findings: dict[str, Any],
     warnings: list[str] | None,
 ) -> None:
-    """Replace model-authored snippets with repository bytes at their claimed lines."""
+    """Ground model-authored snippets without changing their claimed meaning.
+
+    A substantive mismatch is not safe to repair by copying bytes from the
+    claimed location.  In particular, a model can transpose a vulnerable
+    example and its negative control: blindly replacing both excerpts makes
+    the JSON schema-valid while preserving an inverted security conclusion.
+    Only surrounding whitespace and line-ending differences are recoverable;
+    every other mismatch discards the finding so finalization fails closed.
+    """
 
     repository_value = os.environ.get("COPILOT_SECURITY_REPOSITORY")
     rows = findings.get("findings")
@@ -3526,6 +3534,7 @@ def _ground_standalone_findings_evidence(
     repository = Path(repository_value).resolve()
     source_cache: dict[str, list[str] | None] = {}
     remaining_budget = [SOURCE_READ_MAX_BYTES]
+    retained_rows: list[Any] = []
 
     def source_lines(relative_path: str) -> list[str] | None:
         if relative_path in source_cache:
@@ -3556,12 +3565,15 @@ def _ground_standalone_findings_evidence(
 
     for finding_index, finding in enumerate(rows):
         if not isinstance(finding, dict):
+            retained_rows.append(finding)
             continue
         evidence_rows = finding.get("codeEvidence")
         if not isinstance(evidence_rows, list):
+            retained_rows.append(finding)
             continue
         grounded: list[dict[str, Any]] = []
         reanchored = 0
+        mismatched = 0
         removed = 0
         for evidence in evidence_rows:
             location = _standalone_location(evidence)
@@ -3579,7 +3591,16 @@ def _ground_standalone_findings_evidence(
             if not code:
                 removed += 1
                 continue
-            if evidence.get("code") != code:
+            authored_code = evidence.get("code")
+            normalized_authored_code = (
+                authored_code.replace("\r\n", "\n").replace("\r", "\n").strip()
+                if isinstance(authored_code, str)
+                else None
+            )
+            if normalized_authored_code != code:
+                mismatched += 1
+                continue
+            if authored_code != code:
                 reanchored += 1
             evidence["path"] = location["path"]
             evidence["startLine"] = start
@@ -3595,6 +3616,12 @@ def _ground_standalone_findings_evidence(
                 f"Recovered finding {finding_index + 1}: re-anchored "
                 f"{reanchored} code-evidence {noun} from repository bytes."
             )
+        if warnings is not None and mismatched:
+            noun = "item" if mismatched == 1 else "items"
+            warnings.append(
+                f"Discarded finding {finding_index + 1}: "
+                f"{mismatched} repository-mismatched code-evidence {noun}."
+            )
         if warnings is not None and removed:
             noun = "item" if removed == 1 else "items"
             warnings.append(
@@ -3607,6 +3634,10 @@ def _ground_standalone_findings_evidence(
                 f"Recovered finding {finding_index + 1}: aligned "
                 f"{corrected_roles} code-evidence {noun} with canonical endpoints."
             )
+        if mismatched:
+            continue
+        retained_rows.append(finding)
+    findings["findings"] = retained_rows
 
 
 def _normalize_standalone_finding(

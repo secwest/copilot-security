@@ -6,6 +6,39 @@ All notable scanner, application, benchmark, and operational changes are recorde
 
 ### Scanner effectiveness
 
+- Hardened the final evidence boundary after the Fastify live self-scan exposed
+  a cross-file sibling inversion. Copilot attributed the vulnerable
+  root-prefix expression to the encoded control and attributed the control
+  expression to the vulnerable fixture; finalization then replaced both
+  excerpts with repository bytes and preserved the inverted conclusion.
+  Finalization now accepts only line-ending or surrounding-whitespace
+  normalization. Any substantive path/line/excerpt mismatch discards the
+  complete finding instead of manufacturing repository-grounded support.
+- Added direct regressions for one mismatched excerpt, the observed
+  vulnerable/control transposition, and benign text normalization. The full
+  suite now exercises 2,254 tests across 220 files and 17,328 assertions:
+  2,223 logically pass and 31 intentionally skip after native reruns close the
+  two unchanged managed-sandbox Git/Windows-state cases. Formatting,
+  generated-model drift, TypeScript, and the production build are green.
+- Two post-hardening npm archives are byte-identical at 2,478,273 bytes with
+  299 entries and SHA-256
+  `b9b57c57b7d531b4682104436fa66962badbec3d529714418bc2c4052258ca99`;
+  isolated installation validates the public API, CLI, 67 installed packages,
+  and all 79 bundled plugin files.
+- The authenticated Fastify deep self-scan completed one `gpt-5.6-sol`
+  high-reasoning session in 29m03s with complete four-path coverage, no
+  deferral, retry, refusal, quota, authentication, rate-limit, credit-limit,
+  or transport error. It consumed 3,488,060 input tokens, including 2,686,763
+  cached, and 59,655 output tokens at a $8.10656525 metered estimate. All 10
+  sealed artifact hashes independently recompute, proving that the defect was
+  semantic rather than artifact tampering; the candidate and validation
+  ledgers already paired the safe path with the vulnerable expression.
+- Exact Fastify implementation checkpoint
+  `146a895f9599e230e57b9eafef70798a6418c473` passes all 11 hosted workflow
+  families: Node `33412876825` with 92/92 jobs, container `33412876669`, Linux
+  GUI `33412876755`, Windows GUI `33412876757`, Java `33412876698`, PHP
+  `33412876707`, Ruby `33412876730`, Rust `33412876719`, Go `33412876749`,
+  .NET `33412876726`, and Kotlin `33412876797`.
 - Added a bounded `node-fastify-open-redirect` model for production Fastify 5
   shorthand routes. It proves exact runtime dependency and official factory
   provenance, a stable application, literal route registration, exact
