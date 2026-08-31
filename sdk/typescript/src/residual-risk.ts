@@ -42315,6 +42315,7 @@ function pythonFlaskCrossFileBlueprintRegistrationEvidence(
   blueprintLines: readonly string[],
   blueprintSymbol: string,
   blueprintAssignmentLine: number,
+  remainingNesting = 1,
 ): PythonFlaskRouteEvidence["propagators"] | undefined {
   if (
     !pythonImportedBindingUnchangedBetween(
@@ -42456,7 +42457,6 @@ function pythonFlaskCrossFileBlueprintRegistrationEvidence(
         applicationAssignment.line,
       );
       if (
-        applicationFactory === undefined ||
         !pythonImportedBindingUnchangedBetween(
           registrationFile.lines,
           application,
@@ -42471,6 +42471,78 @@ function pythonFlaskCrossFileBlueprintRegistrationEvidence(
           line,
         )
       ) {
+        continue;
+      }
+
+      if (applicationFactory === undefined) {
+        if (
+          remainingNesting <= 0 ||
+          scope !== undefined ||
+          registration[1] !== "" ||
+          positional[0]!.trim() === application
+        ) {
+          continue;
+        }
+        const parentFactory = pythonOfficialImportedMemberBinding(
+          registrationFile.lines,
+          "flask",
+          "Blueprint",
+          applicationAssignment.constructor,
+          applicationAssignment.line,
+        );
+        if (parentFactory === undefined) continue;
+
+        const sameFileMount =
+          pythonFlaskSameFileApplicationRegistrationEvidence(
+            registrationFile.path,
+            registrationFile.lines,
+            structuralLines,
+            application,
+            applicationAssignment.line,
+            line + 1,
+          );
+        const crossFileMount =
+          pythonFlaskCrossFileBlueprintRegistrationEvidence(
+            files,
+            registrationFile.path,
+            registrationFile.lines,
+            application,
+            applicationAssignment.line,
+            remainingNesting - 1,
+          );
+        const mounts = [sameFileMount, crossFileMount].filter(
+          (mount): mount is PythonFlaskRouteEvidence["propagators"] =>
+            mount !== undefined,
+        );
+        if (mounts.length !== 1) continue;
+
+        candidates.push([
+          imported.propagator,
+          {
+            kind: "flask-official-blueprint-factory",
+            path: registrationFile.path,
+            line: parentFactory.line,
+            symbol: "flask.Blueprint",
+          },
+          {
+            kind: "flask-blueprint-nesting",
+            path: registrationFile.path,
+            line,
+            symbol: `${application}.register_blueprint`,
+          },
+          ...(keywords.length === 0
+            ? []
+            : [
+                {
+                  kind: "flask-blueprint-literal-url-prefix",
+                  path: registrationFile.path,
+                  line,
+                  symbol: pythonLiteralStringValue(keywords[0]!.value),
+                },
+              ]),
+          ...mounts[0]!,
+        ]);
+        if (candidates.length > 1) return undefined;
         continue;
       }
 

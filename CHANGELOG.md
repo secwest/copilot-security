@@ -6,6 +6,48 @@ All notable scanner, application, benchmark, and operational changes are recorde
 
 ### Scanner effectiveness
 
+- Closed two measured cross-file Flask nested-Blueprint false negatives. A
+  child imported into a parent Blueprint and mounted either on a same-file
+  application or through a second relative import into `create_app` emitted no
+  rows while all 30 previous Flask tests passed; the measured lane was 30 pass,
+  2 fail, and 205 assertions.
+- Added a bounded one-edge cross-file nesting proof. It requires an exact
+  relative child import, stable official top-level parent Blueprint, exact
+  child-to-parent mount, and exactly one final parent mount either on a
+  same-file official application or through one further exact relative import
+  into an undecorated named factory that directly returns its application.
+  Arbitrary recursive package traversal is not performed.
+- Added 16 fail-closed controls for absolute/wildcard imports, child or parent
+  rebinding, non-Blueprint parents, replaced members, conditional, dynamic,
+  unsupported, duplicate, absent, or ambiguous mounts, a second nesting edge,
+  missing factory returns, and unstable final imports.
+- Added a three-module Flask 3.1.3 / Werkzeug 3.1.8 exploit/control pair and
+  strict
+  `python-flask-cross-file-nested-blueprint-factory-open-redirect-manifest.json`.
+  No-follow witnesses prove both registration-prefix overrides, the effective
+  `/root/child/continue` route, and attacker-origin selections one and zero
+  without external I/O. The canonical corpus advances to 201 pairs, 402 cases,
+  and 1,206 repeated scan positions.
+- Focused Flask, canonical, and Rust bookkeeping acceptance passes 60 tests
+  with 3,081 assertions. Full local acceptance runs 2,185 tests across 218
+  files: 2,152 pass, 31 intentional platform/integration skips, and only the
+  same two managed-sandbox permission failures. Both affected files pass
+  natively at 48/48 tests and 242 assertions. The aggregate executes 17,051
+  assertions. Generated-model drift, TypeScript, build, formatting, both
+  witnesses, and the live production audit are clean.
+- Two independently built 299-entry npm packages are byte-identical at
+  2,495,704 bytes with SHA-256
+  `d4b47d0ac0ac38b2cb9d11023672181fd12cbb13c88f40d383b8ebf6de9dbffe`;
+  a fresh 67-package install validates the public API, CLI, and all 79 bundled
+  plugin files.
+- Windows builds with zero warnings/errors, passes 7/7 core and 3/3 shared
+  tests, and passes a verified hidden startup. Its 346,796-byte executable has
+  SHA-256
+  `0b04a3a9356f8eafab8954940519911567c425f3f6ce8ff143533f4630242d5a`.
+  Ubuntu/WSL locked restore and build also have zero warnings/errors; 7/7 core,
+  3/3 shared, and 2/2 Linux UI tests pass, followed by non-graphical and real
+  X11/Xvfb startup. The 72,568-byte Linux executable has SHA-256
+  `7e29d642169a6c218c249216c6c10648307aea88faf636b69ac25741104b4adf`.
 - Closed two measured same-file Flask application-factory false negatives. An
   official Blueprint mounted directly inside `create_app` and an official child
   Blueprint mounted on a parent whose final application mount occurred inside

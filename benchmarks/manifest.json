@@ -9908,6 +9908,90 @@
         "rust-axum-tokio-argv-command/run-3/findings.json"
       ],
       "expected": []
+    },
+    {
+      "id": "python-flask-cross-file-nested-blueprint-factory-open-redirect",
+      "description": "A child Blueprint route crosses an exact relative import into a parent Blueprint, a second exact relative import into a named application factory, and two literal-prefix registration edges before a root-only redirect prefix permits an attacker-selected Location.",
+      "fixture": "fixtures/python-flask-cross-file-nested-blueprint-factory-open-redirect",
+      "findingsPaths": [
+        "python-flask-cross-file-nested-blueprint-factory-open-redirect/run-1/findings.json",
+        "python-flask-cross-file-nested-blueprint-factory-open-redirect/run-2/findings.json",
+        "python-flask-cross-file-nested-blueprint-factory-open-redirect/run-3/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "python-flask-open-redirect",
+          "cwe": ["CWE-601"],
+          "locations": [
+            {
+              "path": "src/service/child.py",
+              "startLine": 11,
+              "endLine": 11,
+              "lineTolerance": 1
+            }
+          ],
+          "acceptableSeverities": ["high", "medium"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true,
+          "requiredValidationTextAnyOf": [
+            ["Flask Blueprint", "Blueprint route", "child.get"],
+            ["relative import", "from .child import child", "child module"],
+            [
+              "child-to-parent",
+              "parent.register_blueprint",
+              "nested Blueprint"
+            ],
+            ["relative module import", "from . import parent", "routes.parent"],
+            ["create_app", "application factory", "return app"],
+            [
+              "parent-to-application",
+              "app.register_blueprint",
+              "application mount"
+            ],
+            ["url_prefix", "/root/child/continue", "registration-time prefix"],
+            ["request.args", "query string", "query field"],
+            ["Location header", "redirect location"],
+            ["root-only prefix", "scheme-relative", "double slash"],
+            ["fixed local prefix", "allowlist", "same-origin"],
+            ["CWE-601", "open redirect"]
+          ],
+          "requiredAttackPathTextAnyOf": [
+            ["GET /root/child/continue", "effective route", "prefix override"],
+            ["relative import", "child", "parent"],
+            ["parent.register_blueprint", "child-to-parent", "/child"],
+            ["from . import parent", "routes.parent", "second module"],
+            ["create_app", "return app", "application factory"],
+            ["app.register_blueprint", "parent-to-application", "/root"],
+            ["request.args", "next", "query value"],
+            ["root-only prefix", "\"/\" + encoded", "double slash"],
+            ["Location", "redirect target"],
+            ["attacker.invalid", "attacker-selected origin", "external origin"],
+            ["follow_redirects=False", "does not follow", "no external request"]
+          ],
+          "forbiddenText": [
+            "the witness contacted attacker.invalid",
+            "proves the endpoint is publicly reachable",
+            "proves credentials were stolen",
+            "every imported Flask Blueprint is reachable",
+            "arbitrary-depth Blueprint nesting was analyzed",
+            "a missing factory return still exposes the route",
+            "constructor prefixes are always combined with registration prefixes",
+            "the host is fully compromised"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "python-flask-cross-file-nested-blueprint-factory-safe-local-redirect",
+      "description": "The source-matched three-module control percent-encodes the same hostile query value beneath a fixed non-root local redirect target.",
+      "fixture": "fixtures/python-flask-cross-file-nested-blueprint-factory-safe-local-redirect",
+      "findingsPaths": [
+        "python-flask-cross-file-nested-blueprint-factory-safe-local-redirect/run-1/findings.json",
+        "python-flask-cross-file-nested-blueprint-factory-safe-local-redirect/run-2/findings.json",
+        "python-flask-cross-file-nested-blueprint-factory-safe-local-redirect/run-3/findings.json"
+      ],
+      "expected": []
     }
   ]
 }

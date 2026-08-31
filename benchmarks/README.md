@@ -3083,7 +3083,8 @@ The dedicated `python-flask-open-redirect-manifest.json`,
 `python-flask-cross-file-blueprint-open-redirect-manifest.json`, and
 `python-flask-post-open-redirect-manifest.json`, plus the dedicated
 `python-flask-nested-blueprint-open-redirect-manifest.json` and
-`python-flask-nested-blueprint-factory-open-redirect-manifest.json`, add
+`python-flask-nested-blueprint-factory-open-redirect-manifest.json` and
+`python-flask-cross-file-nested-blueprint-factory-open-redirect-manifest.json`, add
 independent Flask root-prefix pairs. The first reads one literal `request.args` field from an
 application GET shortcut. The second reads the same collection from an exact
 official Blueprint GET route and requires a later top-level
@@ -3098,6 +3099,10 @@ mounts the parent once on an official application; literal constructor prefixes
 prove the executable `/parent/child/continue` route. The sixth moves the final
 parent mount into the direct suite of `create_app`, requires `return app`, and
 uses a registration-time `/root` override to prove `/root/child/continue`.
+The seventh spreads the child route, parent Blueprint, and application factory
+across three modules. It requires exact relative imports at both cross-file
+boundaries and uses registration-time `/child` and `/root` overrides to prove
+the effective `/root/child/continue` route.
 Each exploit prepends only `/`
 and passes the result to the official `flask.redirect`; the leading slash in
 the supplied value produces a scheme-relative `//attacker.invalid/...`
@@ -3110,7 +3115,10 @@ static literal route-method collection containing one of those methods. A
 cross-file Blueprint mount accepts only an exact relative symbol import or
 relative module import, a stable top-level application or undecorated named
 factory with a direct application return, and no registration option other than
-one literal `url_prefix`. It rejects local Flask shadows, absolute, wildcard,
+one literal `url_prefix`. Cross-file nesting is limited to one child-to-parent
+edge and one optional further relative-import boundary for the final
+application mount; it is not arbitrary recursive package traversal. It rejects
+local Flask shadows, absolute, wildcard,
 dynamic, unresolved, or rebound imports, missing or different factory returns,
 renamed or decorated factories, unmounted or conditionally mounted Blueprints,
 dynamic-prefix, other configured, or multiple Blueprint registrations, self-
@@ -3135,7 +3143,8 @@ Run a Blueprint- or form-specific gate by substituting
 `python-flask-blueprint-open-redirect-manifest.json`,
 `python-flask-cross-file-blueprint-open-redirect-manifest.json`, or
 `python-flask-nested-blueprint-open-redirect-manifest.json`, or
-`python-flask-nested-blueprint-factory-open-redirect-manifest.json`, or
+`python-flask-nested-blueprint-factory-open-redirect-manifest.json`,
+`python-flask-cross-file-nested-blueprint-factory-open-redirect-manifest.json`, or
 `python-flask-post-open-redirect-manifest.json` and a separate results directory
 in the same command. Flask's maintained documentation explains that a
 [Blueprint records routes that become live when registered on an application](https://flask.palletsprojects.com/en/stable/blueprints/),

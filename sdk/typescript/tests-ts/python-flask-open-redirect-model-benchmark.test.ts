@@ -270,6 +270,52 @@ describe("Flask open-redirect model", () => {
     expect(manifest.cases[1].expected).toEqual([]);
   });
 
+  test("keeps a strict cross-file nested-Blueprint factory contract", async () => {
+    const manifest = JSON.parse(
+      await readFile(
+        join(
+          benchmarkRoot,
+          "python-flask-cross-file-nested-blueprint-factory-open-redirect-manifest.json",
+        ),
+        "utf8",
+      ),
+    );
+    expect(manifest.schemaVersion).toBe("1.0");
+    expect(
+      Object.values(manifest.thresholds).every(
+        (value) => value === 0 || value === 1,
+      ),
+    ).toBeTrue();
+    expect(manifest.cases.map(({ id }: { id: string }) => id)).toEqual([
+      "python-flask-cross-file-nested-blueprint-factory-open-redirect",
+      "python-flask-cross-file-nested-blueprint-factory-safe-local-redirect",
+    ]);
+    expect(manifest.cases[0].expected[0]).toMatchObject({
+      id: modelId,
+      cwe: ["CWE-601"],
+      requireValidation: true,
+      requireAttackPath: true,
+      requireCodeEvidence: true,
+    });
+    expect(manifest.cases[0].expected[0].requiredValidationTextAnyOf).toEqual(
+      expect.arrayContaining([
+        expect.arrayContaining(["from .child import child"]),
+        expect.arrayContaining(["child-to-parent"]),
+        expect.arrayContaining(["from . import parent"]),
+        expect.arrayContaining(["create_app"]),
+        expect.arrayContaining(["parent-to-application"]),
+        expect.arrayContaining(["/root/child/continue"]),
+      ]),
+    );
+    expect(manifest.cases[0].expected[0].forbiddenText).toEqual(
+      expect.arrayContaining([
+        "arbitrary-depth Blueprint nesting was analyzed",
+        "constructor prefixes are always combined with registration prefixes",
+      ]),
+    );
+    expect(manifest.cases[1].expected).toEqual([]);
+  });
+
   test("separates the checked-in root-prefix exploit and fixed-local control", async () => {
     const exploit = join(
       benchmarkRoot,
@@ -519,6 +565,66 @@ describe("Flask open-redirect model", () => {
           kind: "flask-application-factory-return",
           path: "src/server.py",
           line: 23,
+        }),
+      ]),
+    );
+    expect(controlModels).toHaveLength(0);
+  });
+
+  test("separates the checked-in cross-file nested-Blueprint factory pair", async () => {
+    const exploit = join(
+      benchmarkRoot,
+      "fixtures",
+      "python-flask-cross-file-nested-blueprint-factory-open-redirect",
+    );
+    const control = join(
+      benchmarkRoot,
+      "fixtures",
+      "python-flask-cross-file-nested-blueprint-factory-safe-local-redirect",
+    );
+    const exploitModels = models(await buildResidualRiskInventory(exploit));
+    const controlModels = models(await buildResidualRiskInventory(control));
+
+    expect(exploitModels).toHaveLength(1);
+    expect(exploitModels[0]).toMatchObject({
+      source: {
+        kind: "flask-request-query-string",
+        path: "src/service/child.py",
+        line: 8,
+      },
+      sink: {
+        kind: "flask-redirect-location",
+        path: "src/service/child.py",
+        line: 11,
+        cweIds: ["CWE-601"],
+      },
+    });
+    expect(exploitModels[0].propagators).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: "relative-python-blueprint-symbol-import",
+          path: "src/service/parent.py",
+          line: 2,
+        }),
+        expect.objectContaining({
+          kind: "flask-blueprint-nesting",
+          path: "src/service/parent.py",
+          line: 5,
+        }),
+        expect.objectContaining({
+          kind: "relative-python-blueprint-module-import",
+          path: "src/service/__init__.py",
+          line: 6,
+        }),
+        expect.objectContaining({
+          kind: "flask-blueprint-registration",
+          path: "src/service/__init__.py",
+          line: 7,
+        }),
+        expect.objectContaining({
+          kind: "flask-application-factory-return",
+          path: "src/service/__init__.py",
+          line: 8,
         }),
       ]),
     );
@@ -1032,6 +1138,315 @@ describe("Flask open-redirect model", () => {
       );
     } finally {
       await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  test("accepts a cross-file child Blueprint nested into a same-file application", async () => {
+    const root = await mkdtemp(join(tmpdir(), "flask-cross-file-nested-"));
+    try {
+      await writeRepository(root, {
+        "service/child.py": [
+          "from flask import Blueprint, redirect, request",
+          'child = Blueprint("child", __name__)',
+          '@child.get("/continue")',
+          "def continue_to():",
+          '    target = request.args.get("next", "")',
+          '    destination = "/" + target',
+          "    return redirect(destination, code=307)",
+          "",
+        ].join("\n"),
+        "service/server.py": [
+          "from flask import Blueprint, Flask",
+          "from .child import child",
+          'parent = Blueprint("parent", __name__)',
+          "parent.register_blueprint(child)",
+          "app = Flask(__name__)",
+          "app.register_blueprint(parent)",
+          "",
+        ].join("\n"),
+      });
+
+      const blueprintModels = models(await buildResidualRiskInventory(root));
+      expect(blueprintModels).toHaveLength(1);
+      expect(blueprintModels[0].propagators).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            kind: "relative-python-blueprint-symbol-import",
+            path: "service/server.py",
+            line: 2,
+          }),
+          expect.objectContaining({
+            kind: "flask-blueprint-nesting",
+            path: "service/server.py",
+            line: 4,
+          }),
+          expect.objectContaining({
+            kind: "flask-blueprint-registration",
+            path: "service/server.py",
+            line: 6,
+          }),
+        ]),
+      );
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  test("accepts one cross-file nesting edge into a third-file application factory", async () => {
+    const root = await mkdtemp(join(tmpdir(), "flask-three-file-nested-"));
+    try {
+      await writeRepository(root, {
+        "service/child.py": [
+          "from flask import Blueprint, redirect, request",
+          'child = Blueprint("child", __name__)',
+          '@child.get("/continue")',
+          "def continue_to():",
+          '    target = request.args.get("next", "")',
+          '    destination = "/" + target',
+          "    return redirect(destination, code=307)",
+          "",
+        ].join("\n"),
+        "service/parent.py": [
+          "from flask import Blueprint",
+          "from .child import child",
+          'parent = Blueprint("parent", __name__)',
+          "parent.register_blueprint(child)",
+          "",
+        ].join("\n"),
+        "service/__init__.py": [
+          "from flask import Flask",
+          "",
+          "def create_app():",
+          "    app = Flask(__name__)",
+          "    from . import parent as routes",
+          "    app.register_blueprint(routes.parent)",
+          "    return app",
+          "",
+        ].join("\n"),
+      });
+
+      const blueprintModels = models(await buildResidualRiskInventory(root));
+      expect(blueprintModels).toHaveLength(1);
+      expect(blueprintModels[0].propagators).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            kind: "relative-python-blueprint-symbol-import",
+            path: "service/parent.py",
+            line: 2,
+          }),
+          expect.objectContaining({
+            kind: "flask-blueprint-nesting",
+            path: "service/parent.py",
+            line: 4,
+          }),
+          expect.objectContaining({
+            kind: "relative-python-blueprint-module-import",
+            path: "service/__init__.py",
+            line: 5,
+          }),
+          expect.objectContaining({
+            kind: "flask-blueprint-registration",
+            path: "service/__init__.py",
+            line: 6,
+          }),
+          expect.objectContaining({
+            kind: "flask-application-factory-return",
+            path: "service/__init__.py",
+            line: 7,
+          }),
+        ]),
+      );
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  test("rejects ambiguous, unstable, or deeper cross-file Blueprint nesting", async () => {
+    const child = [
+      "from flask import Blueprint, redirect, request",
+      'child = Blueprint("child", __name__)',
+      '@child.get("/continue")',
+      "def continue_to():",
+      '    target = request.args.get("next", "")',
+      '    destination = "/" + target',
+      "    return redirect(destination, code=307)",
+      "",
+    ].join("\n");
+    const parent = [
+      "from flask import Blueprint",
+      "from .child import child",
+      'parent = Blueprint("parent", __name__)',
+      "parent.register_blueprint(child)",
+      "",
+    ].join("\n");
+    const application = [
+      "from flask import Flask",
+      "",
+      "def create_app():",
+      "    app = Flask(__name__)",
+      "    from . import parent as routes",
+      "    app.register_blueprint(routes.parent)",
+      "    return app",
+      "",
+    ].join("\n");
+    const variants: ReadonlyArray<
+      readonly [string, string, string, Record<string, string>?]
+    > = [
+      [
+        "absolute-child-import",
+        parent.replace("from .child import child", "from child import child"),
+        application,
+      ],
+      [
+        "wildcard-child-import",
+        parent.replace("from .child import child", "from .child import *"),
+        application,
+      ],
+      [
+        "rebound-child",
+        parent.replace(
+          "parent.register_blueprint(child)",
+          "child = object()\nparent.register_blueprint(child)",
+        ),
+        application,
+      ],
+      [
+        "non-blueprint-parent",
+        parent.replace(
+          'parent = Blueprint("parent", __name__)',
+          "parent = Application()",
+        ),
+        application,
+      ],
+      [
+        "rebound-parent",
+        parent.replace(
+          "parent.register_blueprint(child)",
+          "parent = object()\nparent.register_blueprint(child)",
+        ),
+        application,
+      ],
+      [
+        "replaced-parent-registration-member",
+        parent.replace(
+          "parent.register_blueprint(child)",
+          "parent.register_blueprint = lambda value: None\nparent.register_blueprint(child)",
+        ),
+        application,
+      ],
+      [
+        "conditional-child-mount",
+        parent.replace(
+          "parent.register_blueprint(child)",
+          "if enabled:\n    parent.register_blueprint(child)",
+        ),
+        application,
+      ],
+      [
+        "dynamic-nesting-prefix",
+        parent.replace(
+          "register_blueprint(child)",
+          "register_blueprint(child, url_prefix=prefix)",
+        ),
+        application,
+      ],
+      [
+        "unsupported-nesting-option",
+        parent.replace(
+          "register_blueprint(child)",
+          'register_blueprint(child, subdomain="api")',
+        ),
+        application,
+      ],
+      [
+        "duplicate-child-mount",
+        parent.replace(
+          "parent.register_blueprint(child)",
+          "parent.register_blueprint(child)\nparent.register_blueprint(child)",
+        ),
+        application,
+      ],
+      [
+        "unmounted-parent",
+        parent,
+        application.replace("    app.register_blueprint(routes.parent)\n", ""),
+      ],
+      [
+        "ambiguous-local-and-cross-file-parent-mount",
+        parent
+          .replace(
+            "from flask import Blueprint",
+            "from flask import Blueprint, Flask",
+          )
+          .replace(
+            "parent.register_blueprint(child)",
+            "parent.register_blueprint(child)\nlocal = Flask(__name__)\nlocal.register_blueprint(parent)",
+          ),
+        application,
+      ],
+      [
+        "second-nesting-edge",
+        parent,
+        application.replace(
+          "from . import parent as routes",
+          "from . import grandparent as routes",
+        ),
+        {
+          "service/grandparent.py": [
+            "from flask import Blueprint",
+            "from .parent import parent",
+            'grandparent = Blueprint("grandparent", __name__)',
+            "grandparent.register_blueprint(parent)",
+            "",
+          ].join("\n"),
+        },
+      ],
+      [
+        "missing-application-factory-return",
+        parent,
+        application.replace("    return app\n", ""),
+      ],
+      [
+        "rebound-parent-module",
+        parent,
+        application.replace(
+          "    app.register_blueprint(routes.parent)",
+          "    routes = object()\n    app.register_blueprint(routes.parent)",
+        ),
+      ],
+      [
+        "conditional-parent-mount",
+        parent,
+        application.replace(
+          "    app.register_blueprint(routes.parent)",
+          "    if enabled:\n        app.register_blueprint(routes.parent)",
+        ),
+      ],
+    ];
+
+    for (const [
+      name,
+      candidateParent,
+      candidateApplication,
+      extra,
+    ] of variants) {
+      const root = await mkdtemp(
+        join(tmpdir(), `flask-cross-file-nested-negative-${name}-`),
+      );
+      try {
+        await writeRepository(root, {
+          "service/child.py": child,
+          "service/parent.py": candidateParent,
+          "service/__init__.py": candidateApplication,
+          ...extra,
+        });
+        expect(
+          models(await buildResidualRiskInventory(root)),
+          name,
+        ).toHaveLength(0);
+      } finally {
+        await rm(root, { recursive: true, force: true });
+      }
     }
   });
 
@@ -1826,6 +2241,11 @@ describe("Flask open-redirect model", () => {
     expect(prompt).toContain("flask-blueprint-nesting");
     expect(prompt).toContain("child-to-parent");
     expect(prompt).toContain("relative-python-blueprint-module-import");
+    expect(prompt).toContain(
+      "exactly one explicit relative import into a top-level parent Blueprint",
+    );
+    expect(prompt).toContain("one child-to-parent nesting edge is modeled");
+    expect(prompt).toContain("every participating file");
     expect(prompt).toContain("create_app");
     expect(prompt).toContain("url_prefix");
     expect(prompt).toContain("flask.redirect");

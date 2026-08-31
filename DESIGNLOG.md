@@ -2,6 +2,72 @@
 
 This log records consequential implementation decisions, their evidence, and the tradeoffs that future scanner work must preserve.
 
+## 2026-08-30 — Bound cross-file nested Blueprint reachability
+
+**Measured gap.** The unchanged host emitted zero rows for two maintained Flask
+layouts: a route-bearing child module imported into a parent Blueprint module
+whose parent was mounted on a same-file application, and the same first edge
+with the parent imported into a third application-factory module. All 30 prior
+Flask tests passed; only these two cases failed, producing 30 pass, 2 fail, and
+205 assertions. Flask's maintained
+[Blueprint documentation](https://flask.palletsprojects.com/en/stable/blueprints/)
+explicitly supports nesting a child on a parent and later registering that
+parent on an application, while its
+[application-factory pattern](https://flask.palletsprojects.com/en/stable/patterns/appfactories/)
+uses deferred imports and registration inside the factory.
+
+**Bounded topology decision.** Extend cross-file Blueprint reachability with an
+explicit nesting budget of one. The first edge must be an exact relative symbol
+or module import resolving the completed route's official Blueprint to a
+distinct, stable, top-level official parent Blueprint. The exact top-level
+child registration may have no option or one literal `url_prefix`. The parent
+must then have exactly one proved application mount: either later in its own
+file through the shared application-mount verifier, or through one further
+exact relative import into a top-level official application or direct suite of
+an undecorated `create_app`/`make_app` that constructs, mounts, and directly
+returns the same application. If both final paths exist, neither is trusted.
+
+**Fail-closed boundary.** The recursive helper receives a decreasing integer
+budget; at zero, another Blueprint receiver cannot become an application. This
+admits one child-to-parent edge without turning package scanning into arbitrary
+graph reachability. Absolute or wildcard imports, unstable imports or
+bindings, non-Blueprint parents, replaced registration members, conditional or
+duplicate calls, dynamic or unsupported options, absent or ambiguous final
+mounts, missing returns, and a child-parent-grandparent chain remain negative.
+Sixteen direct adversarial variants pin this boundary.
+
+**Executable evidence.** Source-matched three-module fixtures pin Flask 3.1.3
+and Werkzeug 3.1.8. The child constructor has `/child-default`, its parent
+registration supplies `/child`, the parent constructor has `/parent`, and the
+application registration supplies `/root`. The real TestClient witness proves
+Flask's registration-time overrides yield `/root/child/continue`. With redirect
+following disabled, the exploit selects `attacker.invalid` and the encoded
+fixed-local control does not; neither performs external I/O. The dedicated
+perfect-gate manifest requires both relative-import edges, both registration
+edges, the factory return, effective route, request source, Location boundary,
+origin change, control, and CWE-601, while forbidding arbitrary-depth and
+constructor-prefix-composition claims. The canonical corpus advances to 201
+pairs, 402 cases, and 1,206 repeated positions.
+
+**Local acceptance.** Focused Flask, canonical, and Rust bookkeeping acceptance
+passes 60 tests and 3,081 assertions. Full local acceptance runs 2,185 tests
+across 218 files: 2,152 pass, 31 intentional platform/integration skips, and
+only the established two managed-sandbox permission failures. The affected
+files pass natively at 48/48 and 242 assertions; the aggregate executes 17,051
+assertions. Generated-model drift, TypeScript, build, formatting, both
+witnesses, and the live production audit are clean. Two independently packed
+299-entry npm archives are byte-identical at 2,495,704 bytes with SHA-256
+`d4b47d0ac0ac38b2cb9d11023672181fd12cbb13c88f40d383b8ebf6de9dbffe`;
+an isolated 67-package install validates the public API, CLI, and all 79 plugin
+files. Windows passes zero-warning/error build, 7/7 core, 3/3 shared, and hidden
+startup checks; its 346,796-byte executable has SHA-256
+`0b04a3a9356f8eafab8954940519911567c425f3f6ce8ff143533f4630242d5a`.
+Ubuntu/WSL passes locked restore, zero-warning/error build, 7/7 core, 3/3
+shared, 2/2 Linux UI, non-graphical startup, and real X11/Xvfb startup; its
+72,568-byte executable has SHA-256
+`7e29d642169a6c218c249216c6c10648307aea88faf636b69ac25741104b4adf`.
+Hosted and immutable-checkpoint evidence follows the pushed implementation.
+
 ## 2026-08-30 — Close same-file Blueprint application-factory reachability
 
 **Measured gap.** The unchanged host emitted zero rows for two maintained Flask
