@@ -51,8 +51,17 @@ All notable scanner, application, benchmark, and operational changes are recorde
   X11/Xvfb startup. The 72,568-byte Linux executable has SHA-256
   `7e29d642169a6c218c249216c6c10648307aea88faf636b69ac25741104b4adf`.
   All disposable package and platform-publish trees were removed after
-  inspection. Hosted and immutable-checkpoint evidence follows after the
-  implementation checkpoint.
+  inspection.
+- Exact implementation checkpoint
+  `7a843dd9dda93a06c6c5ba3b261ae47d0021724e` has a 3,806,304-byte tracked
+  source archive with SHA-256
+  `1411daa482a50e75c2e3fe7e6c9ab4fea5365b481163a39e49b73d097e0f4984`.
+  All 11 hosted workflow families pass on the first attempt: Node
+  `33381752420` (92/92 jobs), container `33381752517`, Windows GUI
+  `33381752454`, Linux GUI `33381752476`, .NET `33381752513`, Go
+  `33381752418`, Java `33381752503`, Kotlin `33381752407`, PHP `33381752455`,
+  Ruby `33381752522`, and Rust `33381752439`. GitHub reports the repository
+  public with default branch `main`.
 - Closed a measured Flask open-redirect false positive. The previous model
   reported a request-derived redirect guarded by exact positive membership in
   an immutable server-owned tuple; the baseline was 35 prior tests passing,
