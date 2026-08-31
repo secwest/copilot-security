@@ -6,6 +6,29 @@ All notable scanner, application, benchmark, and operational changes are recorde
 
 ### Scanner effectiveness
 
+- Closed two measured same-file Flask application-factory false negatives. An
+  official Blueprint mounted directly inside `create_app` and an official child
+  Blueprint mounted on a parent whose final application mount occurred inside
+  `create_app` each emitted zero rows while the previous 25 Flask tests passed;
+  the measured lane was 25 pass, 2 fail, and 178 assertions.
+- Added shared exact same-file application-mount evidence for direct and nested
+  Blueprint routes. A factory mount requires an undecorated top-level
+  `create_app`/`make_app`, direct-suite official Flask construction and mount,
+  one later direct `return app`, stable Blueprint/application bindings, and no
+  replaced registration member.
+- Added 12 fail-closed factory controls covering renamed/decorated factories,
+  indirect mounts, missing or different returns, application and Blueprint
+  rebinding, member replacement, duplicate mounts, construction after mount,
+  dynamic prefixes, and unsupported options.
+- Added a Flask 3.1.3 / Werkzeug 3.1.8 nested-Blueprint factory pair and strict
+  `python-flask-nested-blueprint-factory-open-redirect-manifest.json`. The
+  witnesses prove that registration-time `/root` overrides the parent
+  constructor prefix, yielding `/root/child/continue`, and record attacker-
+  origin selections one and zero without external I/O. The canonical corpus
+  advances to 200 pairs, 400 cases, and 1,200 repeated scan positions.
+- Focused Flask, canonical, and Rust bookkeeping acceptance passes 55 tests
+  with 3,036 assertions. Full local and distribution evidence follows the
+  implementation checkpoint.
 - Closed a measured one-level Flask nested-Blueprint false negative. Before the
   host change, Flask's documented child-to-parent-to-application registration
   shape emitted zero rows while all 20 previous Flask regressions passed with

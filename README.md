@@ -94,8 +94,9 @@ A Blueprint may be mounted later in the same file, mounted through one exact
 same-file child-to-parent-to-application chain, or imported explicitly from one
 relative sibling module. A nested chain requires distinct stable child and
 parent Blueprints, a completed child route before the child mount, and one later
-top-level parent mount on the same stable official application. Cross-file
-evidence resolves the exact imported
+parent mount either at top level or in the direct suite of an undecorated named
+application factory that returns the same stable official application.
+Cross-file evidence resolves the exact imported
 symbol or `module.blueprint` member and requires either a stable top-level
 official Flask application or an undecorated top-level `create_app`/`make_app`
 factory that constructs, mounts, and directly returns the same application.
@@ -111,8 +112,8 @@ application return, local lookalikes, unsupported collections, opaque
 transformations, or ambiguous arguments. A non-root fixed local prefix is a
 control; a root-only `"/" + value` is not, because a value beginning with slash
 becomes a scheme-relative `//attacker.invalid/...` redirect. Separate pinned
-Flask/Werkzeug application-query, same-file Blueprint, nested Blueprint,
-cross-file application-factory Blueprint, and POST-form pairs use
+Flask/Werkzeug application-query, same-file Blueprint, nested Blueprint, nested
+application-factory Blueprint, cross-file application-factory Blueprint, and POST-form pairs use
 `follow_redirects=False` and inspect only the emitted Location. Flask documents
 [`request.form` as the form-parameter collection](https://flask.palletsprojects.com/en/stable/api/#flask.Request.form)
 and `post()` as the exact [`methods=["POST"]` route shortcut](https://flask.palletsprojects.com/en/stable/api/#flask.Flask.post).

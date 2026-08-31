@@ -228,6 +228,48 @@ describe("Flask open-redirect model", () => {
     expect(manifest.cases[1].expected).toEqual([]);
   });
 
+  test("keeps a strict nested-Blueprint factory exploit/control contract", async () => {
+    const manifest = JSON.parse(
+      await readFile(
+        join(
+          benchmarkRoot,
+          "python-flask-nested-blueprint-factory-open-redirect-manifest.json",
+        ),
+        "utf8",
+      ),
+    );
+    expect(manifest.schemaVersion).toBe("1.0");
+    expect(
+      Object.values(manifest.thresholds).every(
+        (value) => value === 0 || value === 1,
+      ),
+    ).toBeTrue();
+    expect(manifest.cases.map(({ id }: { id: string }) => id)).toEqual([
+      "python-flask-nested-blueprint-factory-open-redirect",
+      "python-flask-nested-blueprint-factory-safe-local-redirect",
+    ]);
+    expect(manifest.cases[0].expected[0]).toMatchObject({
+      id: modelId,
+      cwe: ["CWE-601"],
+      requireValidation: true,
+      requireAttackPath: true,
+      requireCodeEvidence: true,
+    });
+    expect(manifest.cases[0].expected[0].requiredValidationTextAnyOf).toEqual(
+      expect.arrayContaining([
+        expect.arrayContaining(["child-to-parent"]),
+        expect.arrayContaining(["create_app"]),
+        expect.arrayContaining(["parent-to-application"]),
+        expect.arrayContaining(["return app"]),
+        expect.arrayContaining(["Location header"]),
+      ]),
+    );
+    expect(manifest.cases[0].expected[0].forbiddenText.length).toBeGreaterThan(
+      0,
+    );
+    expect(manifest.cases[1].expected).toEqual([]);
+  });
+
   test("separates the checked-in root-prefix exploit and fixed-local control", async () => {
     const exploit = join(
       benchmarkRoot,
@@ -428,6 +470,61 @@ describe("Flask open-redirect model", () => {
     expect(controlModels).toHaveLength(0);
   });
 
+  test("separates the checked-in nested-Blueprint factory pair", async () => {
+    const exploit = join(
+      benchmarkRoot,
+      "fixtures",
+      "python-flask-nested-blueprint-factory-open-redirect",
+    );
+    const control = join(
+      benchmarkRoot,
+      "fixtures",
+      "python-flask-nested-blueprint-factory-safe-local-redirect",
+    );
+    const exploitModels = models(await buildResidualRiskInventory(exploit));
+    const controlModels = models(await buildResidualRiskInventory(control));
+
+    expect(exploitModels).toHaveLength(1);
+    expect(exploitModels[0]).toMatchObject({
+      source: {
+        kind: "flask-request-query-string",
+        path: "src/server.py",
+        line: 11,
+      },
+      sink: {
+        kind: "flask-redirect-location",
+        path: "src/server.py",
+        line: 14,
+        cweIds: ["CWE-601"],
+      },
+    });
+    expect(exploitModels[0].propagators).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: "flask-blueprint-nesting",
+          path: "src/server.py",
+          line: 17,
+        }),
+        expect.objectContaining({
+          kind: "flask-application-factory-function",
+          path: "src/server.py",
+          line: 20,
+        }),
+        expect.objectContaining({
+          kind: "flask-blueprint-registration",
+          path: "src/server.py",
+          line: 22,
+        }),
+        expect.objectContaining({
+          kind: "flask-application-factory-return",
+          path: "src/server.py",
+          line: 23,
+        }),
+      ]),
+    );
+    expect(controlModels).toHaveLength(0);
+  });
+
   test("accepts an exact registered Blueprint route", async () => {
     const root = await mkdtemp(join(tmpdir(), "flask-blueprint-redirect-"));
     try {
@@ -500,6 +597,198 @@ describe("Flask open-redirect model", () => {
           }),
         ]),
       );
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  test("accepts a same-file Blueprint mount inside an application factory", async () => {
+    const root = await mkdtemp(join(tmpdir(), "flask-blueprint-factory-"));
+    try {
+      await writeRepository(root, {
+        "server.py": [
+          "from flask import Blueprint, Flask, redirect, request",
+          'links = Blueprint("links", __name__)',
+          '@links.get("/continue")',
+          "def continue_to():",
+          '    target = request.args.get("next", "")',
+          '    destination = "/" + target',
+          "    return redirect(destination, code=307)",
+          "",
+          "def create_app():",
+          "    app = Flask(__name__)",
+          '    app.register_blueprint(links, url_prefix="/links")',
+          "    return app",
+          "",
+        ].join("\n"),
+      });
+
+      const blueprintModels = models(await buildResidualRiskInventory(root));
+      expect(blueprintModels).toHaveLength(1);
+      expect(blueprintModels[0].propagators).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            kind: "flask-application-factory-function",
+            line: 9,
+          }),
+          expect.objectContaining({
+            kind: "flask-blueprint-registration",
+            line: 11,
+          }),
+          expect.objectContaining({
+            kind: "flask-application-factory-return",
+            line: 12,
+          }),
+        ]),
+      );
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  test("accepts a nested Blueprint mounted inside an application factory", async () => {
+    const root = await mkdtemp(join(tmpdir(), "flask-nested-factory-"));
+    try {
+      await writeRepository(root, {
+        "server.py": [
+          "from flask import Blueprint, Flask, redirect, request",
+          'parent = Blueprint("parent", __name__)',
+          'child = Blueprint("child", __name__)',
+          '@child.get("/continue")',
+          "def continue_to():",
+          '    target = request.args.get("next", "")',
+          '    destination = "/" + target',
+          "    return redirect(destination, code=307)",
+          "",
+          "parent.register_blueprint(child)",
+          "",
+          "def create_app():",
+          "    app = Flask(__name__)",
+          '    app.register_blueprint(parent, url_prefix="/root")',
+          "    return app",
+          "",
+        ].join("\n"),
+      });
+
+      const blueprintModels = models(await buildResidualRiskInventory(root));
+      expect(blueprintModels).toHaveLength(1);
+      expect(blueprintModels[0].propagators).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            kind: "flask-blueprint-nesting",
+            line: 10,
+          }),
+          expect.objectContaining({
+            kind: "flask-application-factory-function",
+            line: 12,
+          }),
+          expect.objectContaining({
+            kind: "flask-blueprint-registration",
+            line: 14,
+          }),
+          expect.objectContaining({
+            kind: "flask-application-factory-return",
+            line: 15,
+          }),
+        ]),
+      );
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  test("rejects ambiguous or unstable same-file application-factory mounts", async () => {
+    const registered = [
+      "from flask import Blueprint, Flask, redirect, request",
+      'links = Blueprint("links", __name__)',
+      '@links.get("/continue")',
+      "def continue_to():",
+      '    target = request.args.get("next", "")',
+      '    destination = "/" + target',
+      "    return redirect(destination, code=307)",
+      "",
+      "def create_app():",
+      "    app = Flask(__name__)",
+      "    app.register_blueprint(links)",
+      "    return app",
+      "",
+    ].join("\n");
+    const variants: ReadonlyArray<readonly [string, string]> = [
+      ["renamed-factory", registered.replace("create_app", "build_app")],
+      [
+        "decorated-factory",
+        registered.replace("def create_app():", "@cache\ndef create_app():"),
+      ],
+      [
+        "conditional-mount",
+        registered.replace(
+          "    app.register_blueprint(links)",
+          "    if enabled:\n        app.register_blueprint(links)",
+        ),
+      ],
+      ["missing-return", registered.replace("    return app\n", "")],
+      ["different-return", registered.replace("return app", "return other")],
+      [
+        "rebound-application",
+        registered.replace(
+          "    return app",
+          "    app = replacement\n    return app",
+        ),
+      ],
+      [
+        "replaced-application-member",
+        registered.replace(
+          "    app.register_blueprint(links)",
+          "    app.register_blueprint = replacement\n    app.register_blueprint(links)",
+        ),
+      ],
+      [
+        "rebound-blueprint",
+        registered.replace(
+          "def create_app():",
+          "links = replacement\n\ndef create_app():",
+        ),
+      ],
+      [
+        "duplicate-mount",
+        registered.replace(
+          "    app.register_blueprint(links)",
+          "    app.register_blueprint(links)\n    app.register_blueprint(links)",
+        ),
+      ],
+      [
+        "dynamic-prefix",
+        registered.replace(
+          "app.register_blueprint(links)",
+          "app.register_blueprint(links, url_prefix=prefix)",
+        ),
+      ],
+      [
+        "unsupported-option",
+        registered.replace(
+          "app.register_blueprint(links)",
+          'app.register_blueprint(links, name="mounted")',
+        ),
+      ],
+      [
+        "construction-after-mount",
+        registered.replace(
+          "    app = Flask(__name__)\n    app.register_blueprint(links)",
+          "    app.register_blueprint(links)\n    app = Flask(__name__)",
+        ),
+      ],
+    ];
+
+    const root = await mkdtemp(join(tmpdir(), "flask-factory-negative-"));
+    try {
+      for (const [name, source] of variants) {
+        const repository = join(root, name);
+        await writeRepository(repository, { "server.py": source });
+        expect(
+          models(await buildResidualRiskInventory(repository)),
+          name,
+        ).toEqual([]);
+      }
     } finally {
       await rm(root, { recursive: true, force: true });
     }

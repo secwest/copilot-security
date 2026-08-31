@@ -3082,8 +3082,9 @@ The dedicated `python-flask-open-redirect-manifest.json`,
 `python-flask-blueprint-open-redirect-manifest.json`,
 `python-flask-cross-file-blueprint-open-redirect-manifest.json`, and
 `python-flask-post-open-redirect-manifest.json`, plus the dedicated
-`python-flask-nested-blueprint-open-redirect-manifest.json`, add independent
-Flask root-prefix pairs. The first reads one literal `request.args` field from an
+`python-flask-nested-blueprint-open-redirect-manifest.json` and
+`python-flask-nested-blueprint-factory-open-redirect-manifest.json`, add
+independent Flask root-prefix pairs. The first reads one literal `request.args` field from an
 application GET shortcut. The second reads the same collection from an exact
 official Blueprint GET route and requires a later top-level
 `app.register_blueprint(bp)` mount. The third follows Flask's maintained
@@ -3094,7 +3095,10 @@ application. The fourth reads one literal `request.form` field from an exact
 `app.route(..., methods=["POST"])` registration. The fifth records a child
 Blueprint route, mounts that child once on a distinct parent Blueprint, then
 mounts the parent once on an official application; literal constructor prefixes
-prove the executable `/parent/child/continue` route. Each exploit prepends only `/`
+prove the executable `/parent/child/continue` route. The sixth moves the final
+parent mount into the direct suite of `create_app`, requires `return app`, and
+uses a registration-time `/root` override to prove `/root/child/continue`.
+Each exploit prepends only `/`
 and passes the result to the official `flask.redirect`; the leading slash in
 the supplied value produces a scheme-relative `//attacker.invalid/...`
 Location. Each topology-matched control percent-encodes the same value below
@@ -3131,6 +3135,7 @@ Run a Blueprint- or form-specific gate by substituting
 `python-flask-blueprint-open-redirect-manifest.json`,
 `python-flask-cross-file-blueprint-open-redirect-manifest.json`, or
 `python-flask-nested-blueprint-open-redirect-manifest.json`, or
+`python-flask-nested-blueprint-factory-open-redirect-manifest.json`, or
 `python-flask-post-open-redirect-manifest.json` and a separate results directory
 in the same command. Flask's maintained documentation explains that a
 [Blueprint records routes that become live when registered on an application](https://flask.palletsprojects.com/en/stable/blueprints/),

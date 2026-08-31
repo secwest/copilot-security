@@ -17,13 +17,17 @@ scheme-relative `//attacker.invalid/path` Location and remains reportable.
 The typed Flask model also requires exact application, route, request, query-
 or-form field, redirect, and Location evidence. A same-file official Blueprint
 route is accepted only when a later exact top-level official Flask application
-mounts that same stable Blueprint. The cross-file model additionally resolves
+mounts that same stable Blueprint or when an undecorated named application
+factory constructs, mounts, and directly returns the same stable application.
+The cross-file model additionally resolves
 one explicit relative symbol or module import to the exact Blueprint file and
 requires either a stable top-level Flask application or an undecorated
 `create_app`/`make_app` that constructs, mounts, and directly returns the same
 application. A separate same-file nesting rule proves one ordered child route,
 child-to-distinct-parent registration, and parent-to-official-application
-registration. Each exact registration may use at most one literal `url_prefix`.
+registration. The final nested mount may also occur in that exact factory
+suite. Each exact registration may use at most one literal `url_prefix`; a
+registration prefix overrides the corresponding Blueprint constructor default.
 This mirrors Flask's maintained
 [application-factory pattern](https://flask.palletsprojects.com/en/stable/patterns/appfactories/)
 and [Blueprint tutorial](https://flask.palletsprojects.com/en/stable/tutorial/views/),
@@ -44,8 +48,9 @@ unstable parent members, ambiguous decorators or arguments,
 unsupported collections, and opaque transformations fail closed. Separate
 pinned no-follow application-query, same-file Blueprint-query, cross-file
 application-factory Blueprint-query, nested Blueprint-query, and form
-Flask/Werkzeug exploit/control pairs prove the authority switch and fixed-local
-control without external I/O.
+application-factory Blueprint-query, nested application-factory Blueprint-query,
+and form Flask/Werkzeug exploit/control pairs prove the authority switch and
+fixed-local control without external I/O.
 
 The parallel typed Django model requires an official `path` or `re_path`
 binding inside one balanced `urlpatterns` list, a resolvable registered

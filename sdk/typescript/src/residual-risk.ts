@@ -41882,6 +41882,7 @@ interface PythonFlaskBlueprintImportEvidence {
 
 interface PythonFlaskBlueprintRegistrationCandidate {
   application: string;
+  indent: string;
   line: number;
   urlPrefix?: string;
 }
@@ -41891,10 +41892,11 @@ function pythonFlaskSameFileBlueprintRegistrations(
   structuralLines: readonly string[],
   blueprintSymbol: string,
   firstLine: number,
+  allowIndented = false,
 ): PythonFlaskBlueprintRegistrationCandidate[] {
   const registrations: PythonFlaskBlueprintRegistrationCandidate[] = [];
   const registrationPattern = new RegExp(
-    `^([A-Za-z_]\\w*)\\s*\\.\\s*register_blueprint\\s*\\(([\\s\\S]*)\\)\\s*$`,
+    `^(\\s*)([A-Za-z_]\\w*)\\s*\\.\\s*register_blueprint\\s*\\(([\\s\\S]*)\\)\\s*$`,
     "u",
   );
   for (let line = firstLine; line <= lines.length; line += 1) {
@@ -41907,11 +41909,13 @@ function pythonFlaskSameFileBlueprintRegistrations(
     if (
       registration?.[1] === undefined ||
       registration[2] === undefined ||
-      originalRegistration?.[2] === undefined
+      registration[3] === undefined ||
+      originalRegistration?.[3] === undefined ||
+      (!allowIndented && registration[1] !== "")
     ) {
       continue;
     }
-    const arguments_ = splitPythonArguments(originalRegistration[2]);
+    const arguments_ = splitPythonArguments(originalRegistration[3]);
     if (
       arguments_.some((argument) => argument.trim().startsWith("*")) ||
       arguments_.length < 1 ||
@@ -41937,12 +41941,179 @@ function pythonFlaskSameFileBlueprintRegistrations(
         : pythonLiteralStringValue(prefix[0][1]);
     if (prefix.length === 1 && urlPrefix === undefined) continue;
     registrations.push({
-      application: registration[1],
+      application: registration[2],
+      indent: registration[1],
       line,
       ...(urlPrefix === undefined ? {} : { urlPrefix }),
     });
   }
   return registrations;
+}
+
+function pythonFlaskSameFileApplicationRegistrationEvidence(
+  path: string,
+  lines: readonly string[],
+  structuralLines: readonly string[],
+  blueprintSymbol: string,
+  blueprintAssignmentLine: number,
+  firstLine: number,
+): PythonFlaskRouteEvidence["propagators"] | undefined {
+  const registrations = pythonFlaskSameFileBlueprintRegistrations(
+    lines,
+    structuralLines,
+    blueprintSymbol,
+    firstLine,
+    true,
+  );
+  const blueprintPattern = escapeRegularExpression(blueprintSymbol);
+  const registrationMention = new RegExp(
+    `\\.\\s*register_blueprint\\s*\\([^\\r\\n)]*\\b${blueprintPattern}\\b`,
+    "u",
+  );
+  const mentions = structuralLines
+    .slice(Math.max(0, firstLine - 1))
+    .filter((line) => registrationMention.test(line)).length;
+  if (registrations.length !== 1 || mentions !== 1) return undefined;
+  const registration = registrations[0]!;
+  const scope = pythonFlaskHandlerAtLine(lines, registration.line);
+  const directScopeIndent =
+    scope === undefined
+      ? undefined
+      : pythonFlaskDirectFunctionSuiteIndent(lines, scope);
+  if (
+    scope !== undefined &&
+    (!new Set(["create_app", "make_app"]).has(scope.symbol) ||
+      pythonDecoratorSpansBeforeFunction(lines, scope.startLine).length !== 0 ||
+      directScopeIndent === undefined ||
+      registration.indent !== directScopeIndent)
+  ) {
+    return undefined;
+  }
+  if (scope === undefined && registration.indent !== "") return undefined;
+
+  const applicationPattern = escapeRegularExpression(registration.application);
+  const assignments: Array<{
+    constructor: string;
+    indent: string;
+    line: number;
+  }> = [];
+  const assignmentFirstLine = scope?.startLine ?? 1;
+  for (let line = assignmentFirstLine; line < registration.line; line += 1) {
+    const assignment = new RegExp(
+      `^(\\s*)${applicationPattern}\\s*(?::[^=]+)?=\\s*([A-Za-z_]\\w*(?:\\.[A-Za-z_]\\w*)?)\\s*\\(`,
+      "u",
+    ).exec(structuralLines[line - 1] ?? "");
+    if (assignment?.[1] !== undefined && assignment[2] !== undefined) {
+      assignments.push({
+        constructor: assignment[2],
+        indent: assignment[1],
+        line,
+      });
+    }
+  }
+  if (assignments.length !== 1) return undefined;
+  const assignment = assignments[0]!;
+  if (assignment.indent !== registration.indent) return undefined;
+  const applicationFactory = pythonOfficialImportedMemberBinding(
+    lines,
+    "flask",
+    "Flask",
+    assignment.constructor,
+    assignment.line,
+  );
+  if (
+    applicationFactory === undefined ||
+    !pythonImportedBindingUnchangedBetween(
+      lines,
+      blueprintSymbol,
+      blueprintAssignmentLine,
+      registration.line,
+    ) ||
+    !pythonImportedBindingUnchangedBetween(
+      lines,
+      registration.application,
+      assignment.line,
+      registration.line,
+    ) ||
+    pythonObjectMemberReassignedBetween(
+      lines,
+      registration.application,
+      "register_blueprint",
+      assignment.line,
+      registration.line,
+    )
+  ) {
+    return undefined;
+  }
+
+  const returns: number[] = [];
+  if (scope !== undefined) {
+    const returnPattern = new RegExp(
+      `^${escapeRegularExpression(registration.indent)}return\\s+${applicationPattern}\\s*$`,
+      "u",
+    );
+    for (let line = registration.line + 1; line <= scope.endLine; line += 1) {
+      if (returnPattern.test(structuralLines[line - 1] ?? "")) {
+        returns.push(line);
+      }
+    }
+    if (
+      returns.length !== 1 ||
+      !pythonImportedBindingUnchangedBetween(
+        lines,
+        registration.application,
+        assignment.line,
+        returns[0]! + 1,
+      )
+    ) {
+      return undefined;
+    }
+  }
+
+  return [
+    {
+      kind: "flask-official-application-factory",
+      path,
+      line: applicationFactory.line,
+      symbol: "flask.Flask",
+    },
+    ...(scope === undefined
+      ? []
+      : [
+          {
+            kind: "flask-application-factory-function",
+            path,
+            line: scope.startLine,
+            symbol: `${scope.symbol}()`,
+          },
+        ]),
+    {
+      kind: "flask-blueprint-registration",
+      path,
+      line: registration.line,
+      symbol: `${registration.application}.register_blueprint`,
+    },
+    ...(registration.urlPrefix === undefined
+      ? []
+      : [
+          {
+            kind: "flask-blueprint-literal-url-prefix",
+            path,
+            line: registration.line,
+            symbol: registration.urlPrefix,
+          },
+        ]),
+    ...(returns.length === 0
+      ? []
+      : [
+          {
+            kind: "flask-application-factory-return",
+            path,
+            line: returns[0]!,
+            symbol: `return ${registration.application}`,
+          },
+        ]),
+  ];
 }
 
 function pythonFlaskNestedBlueprintRegistrationEvidence(
@@ -42000,59 +42171,15 @@ function pythonFlaskNestedBlueprintRegistrationEvidence(
     return undefined;
   }
 
-  const mounts = pythonFlaskSameFileBlueprintRegistrations(
+  const mountEvidence = pythonFlaskSameFileApplicationRegistrationEvidence(
+    path,
     lines,
     structuralLines,
     parent,
+    parentAssignment.line,
     nesting.line + 1,
   );
-  if (mounts.length !== 1) return undefined;
-  const mount = mounts[0]!;
-  const applicationPattern = escapeRegularExpression(mount.application);
-  const applicationAssignments: Array<{ constructor: string; line: number }> =
-    [];
-  for (let line = 1; line < mount.line; line += 1) {
-    const assignment = new RegExp(
-      `^${applicationPattern}\\s*(?::[^=]+)?=\\s*([A-Za-z_]\\w*(?:\\.[A-Za-z_]\\w*)?)\\s*\\(`,
-      "u",
-    ).exec(structuralLines[line - 1] ?? "");
-    if (assignment?.[1] !== undefined) {
-      applicationAssignments.push({ constructor: assignment[1], line });
-    }
-  }
-  if (applicationAssignments.length !== 1) return undefined;
-  const applicationAssignment = applicationAssignments[0]!;
-  const applicationFactory = pythonOfficialImportedMemberBinding(
-    lines,
-    "flask",
-    "Flask",
-    applicationAssignment.constructor,
-    applicationAssignment.line,
-  );
-  if (
-    applicationFactory === undefined ||
-    !pythonImportedBindingUnchangedBetween(
-      lines,
-      parent,
-      parentAssignment.line,
-      mount.line,
-    ) ||
-    !pythonImportedBindingUnchangedBetween(
-      lines,
-      mount.application,
-      applicationAssignment.line,
-      mount.line,
-    ) ||
-    pythonObjectMemberReassignedBetween(
-      lines,
-      mount.application,
-      "register_blueprint",
-      applicationAssignment.line,
-      mount.line,
-    )
-  ) {
-    return undefined;
-  }
+  if (mountEvidence === undefined) return undefined;
   return [
     {
       kind: "flask-official-blueprint-factory",
@@ -42076,28 +42203,7 @@ function pythonFlaskNestedBlueprintRegistrationEvidence(
             symbol: nesting.urlPrefix,
           },
         ]),
-    {
-      kind: "flask-official-application-factory",
-      path,
-      line: applicationFactory.line,
-      symbol: "flask.Flask",
-    },
-    {
-      kind: "flask-blueprint-registration",
-      path,
-      line: mount.line,
-      symbol: `${mount.application}.register_blueprint`,
-    },
-    ...(mount.urlPrefix === undefined
-      ? []
-      : [
-          {
-            kind: "flask-blueprint-literal-url-prefix",
-            path,
-            line: mount.line,
-            symbol: mount.urlPrefix,
-          },
-        ]),
+    ...mountEvidence,
   ];
 }
 
@@ -42686,6 +42792,37 @@ function pythonFlaskRouteEvidence(
     wrapper.endLine + 1,
   );
   if (registrations.length === 0) {
+    const applicationFactoryRegistration =
+      pythonFlaskSameFileApplicationRegistrationEvidence(
+        path,
+        lines,
+        structuralLines,
+        receiver,
+        assignment.line,
+        wrapper.endLine + 1,
+      );
+    if (applicationFactoryRegistration !== undefined) {
+      return {
+        allowsForm,
+        formMethod,
+        line: decorators[0]!.line,
+        propagators: [
+          {
+            kind: "flask-official-blueprint-factory",
+            path,
+            line: blueprintFactory.line,
+            symbol: "flask.Blueprint",
+          },
+          {
+            kind: "flask-route",
+            path,
+            line: decorators[0]!.line,
+            symbol: `${receiver}.${route[2]}`,
+          },
+          ...applicationFactoryRegistration,
+        ],
+      };
+    }
     const localRegistrationMention = new RegExp(
       `\\.\\s*register_blueprint\\s*\\([^\\r\\n)]*\\b${receiverPattern}\\b`,
       "u",

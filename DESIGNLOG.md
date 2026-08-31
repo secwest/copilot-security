@@ -2,6 +2,49 @@
 
 This log records consequential implementation decisions, their evidence, and the tradeoffs that future scanner work must preserve.
 
+## 2026-08-30 — Close same-file Blueprint application-factory reachability
+
+**Measured gap.** The unchanged host emitted zero rows for two maintained Flask
+shapes: an official same-file Blueprint mounted inside `create_app`, and an
+official same-file child Blueprint mounted on a parent whose final application
+mount and return occurred inside `create_app`. The preceding 25 Flask tests
+still passed; the measured result was 25 pass, 2 fail, and 178 assertions. This
+showed that cross-file application-factory support had not actually closed the
+same-file factory topology advertised to the correction pass.
+
+**Shared typed decision.** Parse exact same-file Blueprint registrations with
+their indentation, but admit an indented application edge only when it belongs
+to the direct suite of one undecorated top-level `create_app` or `make_app`.
+Require one same-suite official Flask construction before registration, stable
+Blueprint and application bindings, an unchanged `register_blueprint` member,
+and exactly one later same-suite `return` of that application. Reuse the same
+verifier for a direct Blueprint route and for the parent side of the existing
+one-level child-to-parent model. Preserve separate application-factory function,
+application construction, registration, literal-prefix, and return evidence.
+
+**Fail-closed and URL semantics.** Exactly one syntactic mount of the Blueprint
+may follow the route or nesting edge. Renamed or decorated factories, indirect
+suites, missing/different returns, construction after registration, Blueprint
+or application rebinding, member replacement, duplicate calls, dynamic
+prefixes, expansions, and unsupported options remain negative. The first
+executable witness request also caught a semantic distinction worth preserving:
+a registration-time `url_prefix` overrides that Blueprint's constructor default.
+The parent created with `/parent` and mounted with `/root` therefore exposes the
+child at `/root/child/continue`, not `/root/parent/child/continue`.
+
+**Executable corpus and initial evidence.** The Flask 3.1.3 / Werkzeug 3.1.8
+twins keep identical child and parent Blueprints, `create_app`, construction,
+registration, direct return, request, and redirect. The exploit's root-only
+prefix selects `attacker.invalid`; the fixed-local control percent-encodes the
+same value under `/continue?next=`. Both use TestClient with redirect following
+disabled and perform no external request. The strict manifest requires the
+child route, child-to-parent edge, factory, parent-to-application edge, direct
+return, effective route, request, Location, origin switch, control, and CWE-601
+in validation and attack-path fields. The canonical corpus advances to 200
+pairs, 400 cases, and 1,200 repeated positions. Focused Flask, canonical, and
+Rust bookkeeping acceptance passes 55 tests and 3,036 assertions. Full local,
+package, GUI, hosted, and immutable-checkpoint evidence follows.
+
 ## 2026-08-30 — Prove one-level nested Flask Blueprint reachability
 
 **Measured gap and maintained contract.** The unchanged host emitted zero rows
