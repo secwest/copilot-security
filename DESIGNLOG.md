@@ -104,7 +104,20 @@ Ubuntu/WSL restores the locked graph, builds without warnings/errors, passes
 those suites plus 2/2 headless interface tests, and passes non-graphical and
 X11/Xvfb startup. Its 72,568-byte executable has SHA-256
 `7e29d642169a6c218c249216c6c10648307aea88faf636b69ac25741104b4adf`.
-Hosted evidence will be appended after the public implementation checkpoint.
+**Hosted evidence.** Exact implementation checkpoint
+`09c145bb3c432ecf62ddc7a869aee38122088eaa` passes every hosted workflow
+family: [Node `33448278752`](https://github.com/secwest/copilot-security/actions/runs/33448278752)
+with 92/92 jobs,
+[container `33448278739`](https://github.com/secwest/copilot-security/actions/runs/33448278739),
+[Windows GUI `33448278722`](https://github.com/secwest/copilot-security/actions/runs/33448278722),
+[Linux GUI `33448278769`](https://github.com/secwest/copilot-security/actions/runs/33448278769),
+[Java `33448278755`](https://github.com/secwest/copilot-security/actions/runs/33448278755),
+[Kotlin `33448278759`](https://github.com/secwest/copilot-security/actions/runs/33448278759),
+[.NET `33448278730`](https://github.com/secwest/copilot-security/actions/runs/33448278730),
+[Go `33448278720`](https://github.com/secwest/copilot-security/actions/runs/33448278720),
+[Rust `33448278721`](https://github.com/secwest/copilot-security/actions/runs/33448278721),
+[Ruby `33448278754`](https://github.com/secwest/copilot-security/actions/runs/33448278754),
+and [PHP `33448278738`](https://github.com/secwest/copilot-security/actions/runs/33448278738).
 The continuing effectiveness goal remains active.
 
 ## 2026-08-31 — Model Vue Router browser URLs at fetch argument zero
