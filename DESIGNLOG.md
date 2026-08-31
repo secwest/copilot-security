@@ -103,6 +103,25 @@ keeps that real-world format covered, and `.gitattributes` makes repository
 fixture bytes deterministic. Hosted evidence must come from the corrected
 checkpoint rather than treating the first run as green.
 
+**Corrected hosted evidence.** Exact checkpoint
+`82fa7ec0561593048e74182bccb3c89cd5ac7f86` passes every family:
+[Node `33435358362`](https://github.com/secwest/copilot-security/actions/runs/33435358362)
+with 92/92 jobs,
+[container `33435358299`](https://github.com/secwest/copilot-security/actions/runs/33435358299),
+[Windows GUI `33435358313`](https://github.com/secwest/copilot-security/actions/runs/33435358313),
+[Linux GUI `33435358377`](https://github.com/secwest/copilot-security/actions/runs/33435358377),
+[Java `33435358316`](https://github.com/secwest/copilot-security/actions/runs/33435358316),
+[Kotlin `33435358407`](https://github.com/secwest/copilot-security/actions/runs/33435358407),
+[.NET `33435358297`](https://github.com/secwest/copilot-security/actions/runs/33435358297),
+[Go `33435358365`](https://github.com/secwest/copilot-security/actions/runs/33435358365),
+[Rust `33435358414`](https://github.com/secwest/copilot-security/actions/runs/33435358414),
+[Ruby `33435358338`](https://github.com/secwest/copilot-security/actions/runs/33435358338),
+and [PHP `33435358438`](https://github.com/secwest/copilot-security/actions/runs/33435358438).
+The decisive Windows Node 22 job passes 2,246 tests with 31 intentional skips,
+17,397 assertions, and no failure across 2,277 cases in 835.09 seconds. This
+closes the observed checkout-format defect rather than accepting a rerun of the
+old bytes.
+
 ## 2026-08-31 — Discard findings whose evidence contradicts repository bytes
 
 **Measured failure.** The live Fastify acceptance scan reviewed the two changed

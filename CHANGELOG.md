@@ -65,6 +65,13 @@ All notable scanner, application, benchmark, and operational changes are recorde
   2/2 headless interface checks, and passes non-graphical and X11/Xvfb startup;
   its 72,568-byte executable has SHA-256
   `7e29d642169a6c218c249216c6c10648307aea88faf636b69ac25741104b4adf`.
+- Corrected checkpoint `82fa7ec0561593048e74182bccb3c89cd5ac7f86`
+  passes all 11 hosted workflow families. Node `33435358362` passes all 92
+  jobs; its decisive Windows Node 22 suite passes 2,246 tests with 31 skips,
+  17,397 assertions, and no failure across 2,277 cases. Container
+  `33435358299`, Windows GUI `33435358313`, Linux GUI `33435358377`, Java
+  `33435358316`, Kotlin `33435358407`, .NET `33435358297`, Go `33435358365`,
+  Rust `33435358414`, Ruby `33435358338`, and PHP `33435358438` also pass.
 - Hardened the final evidence boundary after the Fastify live self-scan exposed
   a cross-file sibling inversion. Copilot attributed the vulnerable
   root-prefix expression to the encoded control and attributed the control
