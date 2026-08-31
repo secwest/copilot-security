@@ -53,6 +53,29 @@ All notable scanner, application, benchmark, and operational changes are recorde
   chat/completions, 73.7% premium entitlement remaining, and permission to run
   after exhaustion. Live model self-review follows the public checkpoint so
   unpublished working-tree source is not sent outside the host.
+- Exact implementation checkpoint
+  `5923fbf263b25665821bd8be19b3bd4f7adecdc1` has two byte-identical
+  3,824,047-byte tracked `tar.gz` archives with SHA-256
+  `f35121512758f33057695cae35b1fa3fc9c44260a5fa6c638bb21dd1633ae4c1`;
+  both disposable archives were removed after verification. All 11 hosted
+  workflow families pass: Node `33401218533` (92/92 jobs), container
+  `33401218789`, Windows GUI `33401218657`, Linux GUI `33401218659`, Java
+  `33401218439`, .NET `33401218684`, Go `33401218708`, Kotlin `33401218715`,
+  Rust `33401218784`, Ruby `33401220670`, and PHP `33401218623`.
+- A deep live self-scan of the two changed production files and matched Express
+  fixtures completed in one authenticated `gpt-5.6-sol` high-reasoning session
+  in 37m14s, with complete four-path direct review, all six discovery passes,
+  nine merged/rejected candidates, no deferred work, no coverage gap, and no
+  retry, refusal, quota, authentication, or transport error. It consumed
+  23,890,788 input tokens, including 21,991,914 cached, and 142,416 output
+  tokens, with a $27.10202075 metered estimate and no scanner-side cap.
+- The live review independently recognized the intentional root-prefix
+  CWE-601 flow in five discovery passes, proved attacker control, a
+  scheme-relative authority switch, absent local validation, and the fixed
+  non-root control differential, then correctly rejected it as an inert
+  benchmark rather than a deployed product defect. The safe fixture's one
+  erroneous temporal hypothesis was falsified against its exact encoded
+  `/continue/` sink. All 13 sealed manifest hashes independently recompute.
 - Closed a measured Flask open-redirect false negative. The unchanged model
   ignored an attacker-selected GET query field read through the official
   `request.values` collection before `flask.redirect`; all 43 preceding Flask

@@ -71,6 +71,49 @@ public immutable implementation checkpoint, not from an unpublished working
 tree. This increment broadens deterministic recall without relaxing the
 evidence boundary and does not complete the continuing effectiveness goal.
 
+**Hosted and immutable acceptance.** Exact implementation commit
+`5923fbf263b25665821bd8be19b3bd4f7adecdc1` produces two byte-identical
+3,824,047-byte tracked `tar.gz` archives with SHA-256
+`f35121512758f33057695cae35b1fa3fc9c44260a5fa6c638bb21dd1633ae4c1`;
+both disposable archives were removed. All 11 exact-head workflow families
+pass: [Node `33401218533`](https://github.com/secwest/copilot-security/actions/runs/33401218533)
+with 92/92 successful jobs,
+[container `33401218789`](https://github.com/secwest/copilot-security/actions/runs/33401218789),
+[Windows GUI `33401218657`](https://github.com/secwest/copilot-security/actions/runs/33401218657),
+[Linux GUI `33401218659`](https://github.com/secwest/copilot-security/actions/runs/33401218659),
+[Java `33401218439`](https://github.com/secwest/copilot-security/actions/runs/33401218439),
+[.NET `33401218684`](https://github.com/secwest/copilot-security/actions/runs/33401218684),
+[Go `33401218708`](https://github.com/secwest/copilot-security/actions/runs/33401218708),
+[Kotlin `33401218715`](https://github.com/secwest/copilot-security/actions/runs/33401218715),
+[Rust `33401218784`](https://github.com/secwest/copilot-security/actions/runs/33401218784),
+[Ruby `33401220670`](https://github.com/secwest/copilot-security/actions/runs/33401220670),
+and [PHP `33401218623`](https://github.com/secwest/copilot-security/actions/runs/33401218623).
+
+**Live self-review acceptance.** A deep scan of the two changed production
+files and two matched fixtures completed in one authenticated
+`gpt-5.6-sol` high-reasoning session in 37m14s. It directly reviewed all four
+immutable paths, completed all six discovery passes, merged and terminally
+rejected nine candidates, deferred none, closed every coverage surface, and
+reported no product finding. The session consumed 23,890,788 input tokens,
+including 21,991,914 cached, and 142,416 output tokens, with a $27.10202075
+metered estimate and no configured cost or credit cap. No retry, refusal,
+classifier, authentication, quota, rate-limit, credit-limit, or transport error
+occurred.
+
+The zero-finding result is positive self-scan evidence rather than a missed
+benchmark: five discovery passes independently identified the root-prefix
+CWE-601 candidate and exact source/sink, validation proved attacker control,
+the scheme-relative authority switch, absent local control, and the matched
+safe differential, and attack-path analysis retained the broken-control fact.
+The mandatory quality gate then rejected reportability because the exact path
+is an inert `benchmarks/fixtures` surface without production dependency,
+listener, ingress, or deployment proof. One temporal-pass hypothesis against
+the safe sibling was separately falsified by its exact `/continue/` prefix and
+encoding. Coverage is complete with zero gaps or fallbacks, canonical drafts
+were reopened, and all 13 manifest hashes independently recompute. This
+preserves the essential distinction between recognizing vulnerable behavior in
+a benchmark and reporting it as a production defect.
+
 ## 2026-08-31 — Model Flask's combined request-values collection
 
 **Measured gap and comparative source.** A source-matched Flask GET route read
