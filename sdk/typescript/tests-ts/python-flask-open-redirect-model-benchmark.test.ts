@@ -107,6 +107,45 @@ describe("Flask open-redirect model", () => {
     expect(manifest.cases[1].expected).toEqual([]);
   });
 
+  test("keeps a strict registered-Blueprint exploit/control contract", async () => {
+    const manifest = JSON.parse(
+      await readFile(
+        join(
+          benchmarkRoot,
+          "python-flask-blueprint-open-redirect-manifest.json",
+        ),
+        "utf8",
+      ),
+    );
+    expect(manifest.schemaVersion).toBe("1.0");
+    expect(
+      Object.values(manifest.thresholds).every(
+        (value) => value === 0 || value === 1,
+      ),
+    ).toBeTrue();
+    expect(manifest.cases.map(({ id }: { id: string }) => id)).toEqual([
+      "python-flask-blueprint-open-redirect",
+      "python-flask-blueprint-safe-local-redirect",
+    ]);
+    expect(manifest.cases[0].expected[0]).toMatchObject({
+      id: modelId,
+      cwe: ["CWE-601"],
+      requireValidation: true,
+      requireAttackPath: true,
+      requireCodeEvidence: true,
+    });
+    expect(manifest.cases[0].expected[0].requiredValidationTextAnyOf).toEqual(
+      expect.arrayContaining([
+        expect.arrayContaining(["Flask Blueprint"]),
+        expect.arrayContaining(["register_blueprint"]),
+      ]),
+    );
+    expect(manifest.cases[0].expected[0].forbiddenText.length).toBeGreaterThan(
+      0,
+    );
+    expect(manifest.cases[1].expected).toEqual([]);
+  });
+
   test("separates the checked-in root-prefix exploit and fixed-local control", async () => {
     const exploit = join(
       benchmarkRoot,
@@ -166,6 +205,164 @@ describe("Flask open-redirect model", () => {
       ]),
     );
     expect(controlModels).toHaveLength(0);
+  });
+
+  test("separates the checked-in registered-Blueprint exploit and control", async () => {
+    const exploit = join(
+      benchmarkRoot,
+      "fixtures",
+      "python-flask-blueprint-open-redirect",
+    );
+    const control = join(
+      benchmarkRoot,
+      "fixtures",
+      "python-flask-blueprint-safe-local-redirect",
+    );
+    const exploitModels = models(await buildResidualRiskInventory(exploit));
+    const controlModels = models(await buildResidualRiskInventory(control));
+
+    expect(exploitModels).toHaveLength(1);
+    expect(exploitModels[0]).toMatchObject({
+      source: {
+        kind: "flask-request-query-string",
+        path: "src/server.py",
+        line: 10,
+      },
+      sink: {
+        kind: "flask-redirect-location",
+        path: "src/server.py",
+        line: 12,
+        cweIds: ["CWE-601"],
+      },
+    });
+    expect(exploitModels[0].propagators).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: "flask-official-blueprint-factory",
+        }),
+        expect.objectContaining({ kind: "flask-blueprint-registration" }),
+      ]),
+    );
+    expect(controlModels).toHaveLength(0);
+  });
+
+  test("accepts an exact registered Blueprint route", async () => {
+    const root = await mkdtemp(join(tmpdir(), "flask-blueprint-redirect-"));
+    try {
+      await writeRepository(root, {
+        "server.py": [
+          "from flask import Blueprint, Flask, redirect, request",
+          "app = Flask(__name__)",
+          'bp = Blueprint("redirects", __name__)',
+          '@bp.get("/continue")',
+          "def continue_to():",
+          '    target = request.args.get("next", "")',
+          '    destination = "/" + target',
+          "    return redirect(destination, code=307)",
+          "app.register_blueprint(bp)",
+          "",
+        ].join("\n"),
+      });
+
+      const blueprintModels = models(await buildResidualRiskInventory(root));
+      expect(blueprintModels).toHaveLength(1);
+      expect(blueprintModels[0].propagators).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            kind: "flask-official-blueprint-factory",
+          }),
+          expect.objectContaining({ kind: "flask-blueprint-registration" }),
+        ]),
+      );
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  test("rejects unproved or unstable Blueprint registration", async () => {
+    const registered = [
+      "from flask import Blueprint, Flask, redirect, request",
+      "app = Flask(__name__)",
+      'bp = Blueprint("redirects", __name__)',
+      '@bp.get("/continue")',
+      "def continue_to():",
+      '    target = request.args.get("next", "")',
+      '    destination = "/" + target',
+      "    return redirect(destination, code=307)",
+      "app.register_blueprint(bp)",
+      "",
+    ].join("\n");
+    const variants: ReadonlyArray<readonly [string, string]> = [
+      ["unregistered", registered.replace("app.register_blueprint(bp)\n", "")],
+      [
+        "dynamic-registration",
+        registered.replace(
+          "register_blueprint(bp)",
+          "register_blueprint(load(bp))",
+        ),
+      ],
+      [
+        "scoped-registration",
+        registered.replace(
+          "app.register_blueprint(bp)",
+          "def mount():\n    app.register_blueprint(bp)",
+        ),
+      ],
+      [
+        "scoped-blueprint-factory",
+        registered.replace(
+          'bp = Blueprint("redirects", __name__)',
+          'def build_blueprint():\n    bp = Blueprint("redirects", __name__)',
+        ),
+      ],
+      [
+        "rebound-blueprint",
+        registered.replace(
+          "app.register_blueprint(bp)",
+          "bp = object()\napp.register_blueprint(bp)",
+        ),
+      ],
+      [
+        "rebound-application",
+        registered.replace(
+          "app.register_blueprint(bp)",
+          "app = object()\napp.register_blueprint(bp)",
+        ),
+      ],
+      [
+        "replaced-registration-member",
+        registered.replace(
+          "app.register_blueprint(bp)",
+          "app.register_blueprint = lambda value: None\napp.register_blueprint(bp)",
+        ),
+      ],
+      [
+        "multiple-registration",
+        registered.replace(
+          "app.register_blueprint(bp)",
+          "app.register_blueprint(bp)\napp.register_blueprint(bp)",
+        ),
+      ],
+      [
+        "non-flask-application",
+        registered.replace("app = Flask(__name__)", "app = Application()"),
+      ],
+    ];
+
+    for (const [name, server] of variants) {
+      const root = await mkdtemp(
+        join(tmpdir(), `flask-blueprint-negative-${name}-`),
+      );
+      try {
+        await writeRepository(root, { "server.py": server });
+        expect(
+          models(await buildResidualRiskInventory(root)),
+          name,
+        ).toHaveLength(0);
+      } finally {
+        await rm(root, { recursive: true, force: true });
+      }
+    }
   });
 
   test("detects a root-only local prefix but rejects an encoded fixed-local control", async () => {
@@ -586,7 +783,7 @@ describe("Flask open-redirect model", () => {
     }
   });
 
-  test("teaches the reviewer the Flask Location and root-prefix boundary", () => {
+  test("teaches the reviewer the Flask mount, Location, and root-prefix boundary", () => {
     const prompt = scanQualityGatePrompt(
       '{"frameworkModel":{"id":"python-flask-open-redirect"}}',
     );
@@ -594,6 +791,8 @@ describe("Flask open-redirect model", () => {
     expect(prompt).toContain("request.args");
     expect(prompt).toContain("request.form");
     expect(prompt).toContain('methods=["POST"]');
+    expect(prompt).toContain("flask.Blueprint");
+    expect(prompt).toContain("register_blueprint");
     expect(prompt).toContain("flask.redirect");
     expect(prompt).toContain("Location");
     expect(prompt).toContain("root-only");

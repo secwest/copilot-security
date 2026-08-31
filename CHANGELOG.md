@@ -6,6 +6,31 @@ All notable scanner, application, benchmark, and operational changes are recorde
 
 ### Scanner effectiveness
 
+- Closed a measured Flask Blueprint false negative. Before the host change, an
+  exact official `Blueprint` GET route mounted by a later exact
+  `app.register_blueprint(bp)` emitted zero rows while all eleven previous Flask
+  regressions passed. The typed model now binds the declaration to the live
+  application mount instead of treating every Blueprint as reachable.
+- Added separate `flask-official-blueprint-factory` and
+  `flask-blueprint-registration` evidence while retaining the official Flask
+  application factory, exact route method, request-field, redirect, and
+  Location edges. The model requires top-level same-file constructors and one
+  later exact registration of the same stable Blueprint on the same stable
+  official application.
+- Added fail-closed registration controls for unmounted, dynamically mounted,
+  scoped, rebound, member-replaced, multiply mounted, nested-only, shadowed, and
+  non-Flask application cases. Configured or expanded registration calls remain
+  unsupported rather than being guessed reachable.
+- Added a source-matched Flask 3.1.3 / Werkzeug 3.1.8 registered-Blueprint
+  exploit/control pair and strict
+  `python-flask-blueprint-open-redirect-manifest.json`. No-follow TestClient
+  witnesses prove attacker-origin selections of one and zero without external
+  I/O. The canonical corpus advances to 197 pairs, 394 cases, and 1,182 repeated
+  scan positions.
+- Initial focused acceptance passes 40 Flask, canonical, and Rust bookkeeping
+  tests with 2,902 assertions. Both exact-version Blueprint witnesses pass.
+  Full aggregate, package, GUI, hosted, and immutable-checkpoint evidence
+  follows after the implementation checkpoint.
 - Closed a measured Flask form-redirect false negative. Before the host change,
   an official `@app.post` handler whose `request.form.get("next")` value reached
   `flask.redirect` emitted zero rows while all eight previous Flask regressions

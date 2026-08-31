@@ -41989,15 +41989,62 @@ function pythonFlaskRouteEvidence(
   }
   if (assignments.length !== 1) return undefined;
   const assignment = assignments[0]!;
-  const factory = pythonOfficialImportedMemberBinding(
+  const applicationFactory = pythonOfficialImportedMemberBinding(
     lines,
     "flask",
     "Flask",
     assignment.constructor,
     assignment.line,
   );
+  if (applicationFactory !== undefined) {
+    if (
+      !pythonImportedBindingUnchangedBetween(
+        lines,
+        receiver,
+        assignment.line,
+        decorators[0]!.line,
+      ) ||
+      pythonObjectMemberReassignedBetween(
+        lines,
+        receiver,
+        route[2],
+        assignment.line,
+        decorators[0]!.line,
+      )
+    ) {
+      return undefined;
+    }
+    return {
+      allowsForm,
+      formMethod,
+      line: decorators[0]!.line,
+      propagators: [
+        {
+          kind: "flask-official-application-factory",
+          path,
+          line: applicationFactory.line,
+          symbol: "flask.Flask",
+        },
+        {
+          kind: "flask-route",
+          path,
+          line: decorators[0]!.line,
+          symbol: `${receiver}.${route[2]}`,
+        },
+      ],
+    };
+  }
+
+  const blueprintFactory = pythonOfficialImportedMemberBinding(
+    lines,
+    "flask",
+    "Blueprint",
+    assignment.constructor,
+    assignment.line,
+  );
   if (
-    factory === undefined ||
+    blueprintFactory === undefined ||
+    /^\s/u.test(structuralLines[assignment.line - 1] ?? "") ||
     !pythonImportedBindingUnchangedBetween(
       lines,
       receiver,
@@ -42014,22 +42061,98 @@ function pythonFlaskRouteEvidence(
   ) {
     return undefined;
   }
+
+  const registrations: Array<{ application: string; line: number }> = [];
+  const registrationPattern = new RegExp(
+    `^([A-Za-z_]\\w*)\\s*\\.\\s*register_blueprint\\s*\\(\\s*${receiverPattern}\\s*\\)\\s*$`,
+    "u",
+  );
+  for (let line = wrapper.endLine + 1; line <= lines.length; line += 1) {
+    const registration = registrationPattern.exec(
+      structuralLines[line - 1] ?? "",
+    );
+    if (registration?.[1] !== undefined) {
+      registrations.push({ application: registration[1], line });
+    }
+  }
+  if (registrations.length !== 1) return undefined;
+  const registration = registrations[0]!;
+  const applicationPattern = escapeRegularExpression(registration.application);
+  const applicationAssignments: Array<{ constructor: string; line: number }> =
+    [];
+  for (let line = 1; line < registration.line; line += 1) {
+    const applicationAssignment = new RegExp(
+      `^${applicationPattern}\\s*(?::[^=]+)?=\\s*([A-Za-z_]\\w*(?:\\.[A-Za-z_]\\w*)?)\\s*\\(`,
+      "u",
+    ).exec(structuralLines[line - 1] ?? "");
+    if (applicationAssignment?.[1] !== undefined) {
+      applicationAssignments.push({
+        constructor: applicationAssignment[1],
+        line,
+      });
+    }
+  }
+  if (applicationAssignments.length !== 1) return undefined;
+  const registeredApplication = applicationAssignments[0]!;
+  const registeredApplicationFactory = pythonOfficialImportedMemberBinding(
+    lines,
+    "flask",
+    "Flask",
+    registeredApplication.constructor,
+    registeredApplication.line,
+  );
+  if (
+    registeredApplicationFactory === undefined ||
+    !pythonImportedBindingUnchangedBetween(
+      lines,
+      receiver,
+      assignment.line,
+      registration.line,
+    ) ||
+    !pythonImportedBindingUnchangedBetween(
+      lines,
+      registration.application,
+      registeredApplication.line,
+      registration.line,
+    ) ||
+    pythonObjectMemberReassignedBetween(
+      lines,
+      registration.application,
+      "register_blueprint",
+      registeredApplication.line,
+      registration.line,
+    )
+  ) {
+    return undefined;
+  }
   return {
     allowsForm,
     formMethod,
     line: decorators[0]!.line,
     propagators: [
       {
-        kind: "flask-official-application-factory",
+        kind: "flask-official-blueprint-factory",
         path,
-        line: factory.line,
-        symbol: "flask.Flask",
+        line: blueprintFactory.line,
+        symbol: "flask.Blueprint",
       },
       {
         kind: "flask-route",
         path,
         line: decorators[0]!.line,
         symbol: `${receiver}.${route[2]}`,
+      },
+      {
+        kind: "flask-official-application-factory",
+        path,
+        line: registeredApplicationFactory.line,
+        symbol: "flask.Flask",
+      },
+      {
+        kind: "flask-blueprint-registration",
+        path,
+        line: registration.line,
+        symbol: `${registration.application}.register_blueprint`,
       },
     ],
   };

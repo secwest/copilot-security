@@ -2,6 +2,52 @@
 
 This log records consequential implementation decisions, their evidence, and the tradeoffs that future scanner work must preserve.
 
+## 2026-08-30 — Bind Flask Blueprint routes to an exact application mount
+
+**Measured gap and maintained contract.** The unchanged host emitted zero rows
+for an official `Blueprint` GET route whose query value reached
+`flask.redirect`, even though a later exact `app.register_blueprint(bp)` made
+that route live; all eleven pre-existing Flask regressions passed. Flask's
+maintained [Blueprint documentation](https://flask.palletsprojects.com/en/stable/blueprints/)
+states that a Blueprint records operations and that its routes become
+application routes when the Blueprint is registered. The maintained
+[`Flask.register_blueprint` API](https://flask.palletsprojects.com/en/stable/api/#flask.Flask.register_blueprint)
+defines that application boundary. CodeQL's high-precision
+[`py/url-redirection`](https://codeql.github.com/codeql-query-help/python/py-url-redirection/)
+remains the comparative CWE-601 source/sink baseline.
+
+**Typed reachability decision.** A Blueprint route is retained only when the
+same file contains one top-level official `flask.Blueprint` construction, its
+sole literal route decorator, one earlier top-level official `flask.Flask`
+application construction, and one later exact top-level
+`app.register_blueprint(bp)` call. Both object bindings and their relevant
+members must remain stable across construction, decoration, and registration.
+Separate Blueprint-factory and registration propagators join the existing
+route-method, request collection, relative wrapper, redirect, and Location
+evidence, allowing review to name declaration and application reachability
+independently.
+
+**Fail-closed boundary.** An unmounted Blueprint remains negative. Dynamic,
+expanded, configured, scoped, nested-only, or multiple mounts; a registration
+inside an uncalled function; Blueprint or application reassignment; replaced
+route or registration members; local Flask shadows; non-Flask applications;
+multiple decorators; and ambiguous request or redirect roles do not establish
+the new edge. This deliberately leaves cross-file factories and configured
+mounts for a later typed extension rather than converting Blueprint presence
+into presumed exposure.
+
+**Executable corpus and initial acceptance.** The new Flask 3.1.3 / Werkzeug
+3.1.8 twins use the same official constructors, exact `bp.get` route, query
+field, and later application mount. The exploit adds only `/`; the control
+percent-encodes beneath `/continue?next=`. TestClient disables redirect
+following and observes only Location, so the witnesses make no external
+request. The strict dedicated manifest requires Blueprint route and application
+mount evidence in both validation and attack path. The canonical corpus advances
+to 197 pairs, 394 cases, and 1,182 repeated positions. Focused Flask, canonical,
+and Rust bookkeeping acceptance passes 40 tests and 2,902 assertions; both
+exact-version witnesses record attacker-origin selections one and zero. Full
+acceptance follows at the immutable implementation checkpoint.
+
 ## 2026-08-30 — Bind Flask form sources to exact route methods
 
 **Measured gap and maintained contract.** The unchanged host emitted zero rows

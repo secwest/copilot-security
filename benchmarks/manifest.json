@@ -9201,6 +9201,73 @@
       "expected": []
     },
     {
+      "id": "python-flask-blueprint-open-redirect",
+      "description": "An exact official Flask Blueprint is mounted on an official application, and its request.args value receives only a root slash prefix before becoming an attacker-selected Location.",
+      "fixture": "fixtures/python-flask-blueprint-open-redirect",
+      "findingsPaths": [
+        "python-flask-blueprint-open-redirect/run-1/findings.json",
+        "python-flask-blueprint-open-redirect/run-2/findings.json",
+        "python-flask-blueprint-open-redirect/run-3/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "python-flask-open-redirect",
+          "cwe": ["CWE-601"],
+          "locations": [
+            {
+              "path": "src/server.py",
+              "startLine": 12,
+              "endLine": 12,
+              "lineTolerance": 1
+            }
+          ],
+          "acceptableSeverities": ["high", "medium"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true,
+          "requiredValidationTextAnyOf": [
+            ["Flask Blueprint", "Blueprint route", "bp.get"],
+            ["register_blueprint", "Blueprint registration", "application mount"],
+            ["request.args", "query string", "query field"],
+            ["flask.redirect", "official redirect"],
+            ["Location header", "redirect location"],
+            ["root-only prefix", "scheme-relative", "double slash"],
+            ["fixed local prefix", "allowlist", "same-origin"],
+            ["CWE-601", "open redirect"]
+          ],
+          "requiredAttackPathTextAnyOf": [
+            ["Flask Blueprint", "bp.get", "GET /continue"],
+            ["register_blueprint", "application mount", "app registration"],
+            ["request.args", "next", "query value"],
+            ["root-only prefix", "\"/\" + target", "double slash"],
+            ["flask.redirect", "redirect helper"],
+            ["Location", "redirect target"],
+            ["attacker.invalid", "attacker-selected origin", "external origin"],
+            ["follow_redirects=False", "does not follow", "no external request"]
+          ],
+          "forbiddenText": [
+            "the witness contacted attacker.invalid",
+            "proves the endpoint is publicly reachable",
+            "proves credentials were stolen",
+            "every Flask Blueprint is vulnerable",
+            "an unregistered Blueprint is reachable",
+            "the host is fully compromised"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "python-flask-blueprint-safe-local-redirect",
+      "description": "The source-matched registered-Blueprint control percent-encodes the same hostile query value beneath a fixed non-root local redirect target.",
+      "fixture": "fixtures/python-flask-blueprint-safe-local-redirect",
+      "findingsPaths": [
+        "python-flask-blueprint-safe-local-redirect/run-1/findings.json",
+        "python-flask-blueprint-safe-local-redirect/run-2/findings.json",
+        "python-flask-blueprint-safe-local-redirect/run-3/findings.json"
+      ],
+      "expected": []
+    },
+    {
       "id": "python-flask-open-redirect",
       "description": "A Flask request.args query value receives only a root slash prefix and becomes a scheme-relative attacker-selected Location through the official redirect helper.",
       "fixture": "fixtures/python-flask-open-redirect",

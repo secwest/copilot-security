@@ -15,15 +15,21 @@ controls the prefix. Copilot Security distinguishes a non-root fixed local
 prefix from a root-only slash: `"/" + "/attacker.invalid/path"` produces the
 scheme-relative `//attacker.invalid/path` Location and remains reportable.
 The typed Flask model also requires exact application, route, request,
-query-or-form field, redirect, and Location evidence. Flask documents
+query-or-form field, redirect, and Location evidence. A same-file official
+Blueprint route is accepted only when a later exact top-level official Flask
+application calls `register_blueprint` with that same stable Blueprint. Flask
+documents that
+[Blueprints record operations that become application routes when registered](https://flask.palletsprojects.com/en/stable/blueprints/).
+It also documents
 [`request.form`](https://flask.palletsprojects.com/en/stable/api/#flask.Request.form)
 as its form-parameter `ImmutableMultiDict`, and documents `post()` as the exact
 [`route(..., methods=["POST"])` shortcut](https://flask.palletsprojects.com/en/stable/api/#flask.Flask.post).
 The host therefore accepts a form source only under an exact POST, PUT, or
 PATCH shortcut or static literal route-method collection. Default/GET/DELETE
-routes, empty or dynamic method collections, shadows, rebindings, Blueprint-
-only registration, ambiguous decorators or arguments, unsupported collections,
-and opaque transformations fail closed. Separate pinned no-follow query and
+routes, empty or dynamic method collections, shadows, rebindings, unmounted,
+scoped, nested-only, dynamic, or multiple Blueprint registration, ambiguous
+decorators or arguments, unsupported collections, and opaque transformations
+fail closed. Separate pinned no-follow application-query, Blueprint-query, and
 form Flask/Werkzeug exploit/control pairs prove the authority switch and fixed-
 local control without external I/O.
 

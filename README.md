@@ -86,22 +86,29 @@ reference. Configured or ambiguous `Query` calls, non-string or reassigned
 parameters, extra `Annotated` metadata, duplicate URL or response-class roles,
 wildcard route options, guarded or opaque direct returns, star expansion,
 local package shadows, replaced response bindings, and lookalikes fail closed.
-Flask redirects have a separate typed CWE-601 model. It requires an official
-`flask.Flask` application and literal route, one stable
+Flask redirects have a separate typed CWE-601 model. It requires either an
+official `flask.Flask` application route or an official same-file
+`flask.Blueprint` route with a later exact `app.register_blueprint(bp)` mount,
+one stable
 `flask.request.args` query field or `flask.request.form` form field, and an
 official `flask.redirect` Location sink. Form data additionally requires an
 exact `post`, `put`, or `patch` shortcut or a static literal `methods` list or
 tuple containing POST, PUT, or PATCH; default routes, GET, DELETE, empty lists,
 and dynamic method collections do not prove form reachability. It supports
-direct, qualified, subscript, and relative-wrapper forms without promoting
-Blueprint-only registration, local lookalikes, rebound bindings, unsupported
+direct, qualified, subscript, and relative-wrapper forms without promoting an
+unmounted, dynamically mounted, nested-only, multiply mounted, or scoped
+Blueprint declaration, local lookalikes, rebound bindings, unsupported
 collections, opaque transformations, or ambiguous arguments. A non-root fixed
 local prefix is a control; a root-only `"/" + value` is not, because a value
 beginning with slash becomes a scheme-relative `//attacker.invalid/...`
-redirect. Separate pinned Flask/Werkzeug query and POST-form pairs use
+redirect. Separate pinned Flask/Werkzeug application-query, Blueprint-query,
+and POST-form pairs use
 `follow_redirects=False` and inspect only the emitted Location. Flask documents
 [`request.form` as the form-parameter collection](https://flask.palletsprojects.com/en/stable/api/#flask.Request.form)
 and `post()` as the exact [`methods=["POST"]` route shortcut](https://flask.palletsprojects.com/en/stable/api/#flask.Flask.post).
+Its [Blueprint documentation](https://flask.palletsprojects.com/en/stable/blueprints/)
+separately establishes that recorded Blueprint routes become application routes
+when the Blueprint is registered.
 Registered Django function and class-based views now have the same typed
 treatment without collapsing the frameworks into a name-matched rule. The
 Django model requires an official `path` or `re_path` call inside the sole
