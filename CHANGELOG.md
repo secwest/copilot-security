@@ -6,6 +6,27 @@ All notable scanner, application, benchmark, and operational changes are recorde
 
 ### Scanner effectiveness
 
+- Closed a measured Flask open-redirect false positive. The previous model
+  reported a request-derived redirect guarded by exact positive membership in
+  an immutable server-owned tuple; the baseline was 35 prior tests passing,
+  the new safe control failing, and 240 assertions.
+- Added a bounded allowlist proof that suppresses only direct, dominating
+  `target in ALLOWED_REDIRECTS` guards over the exact redirect value when one
+  stable uppercase binding is assigned exactly once to a top-level tuple of at
+  least two literal strings. Negative membership, mutable/dynamic/rebound or
+  function-local data, compound or non-dominating conditions, different
+  values, nested sinks, and unsupported tuple shapes remain reportable.
+- Added 14 adversarial allowlist variants and a Flask 3.1.3 / Werkzeug 3.1.8
+  executable pair. The inverted `not in` exploit emits the selected absolute
+  Location while the positive-membership control selects `/account`; both
+  TestClient witnesses disable redirect following and perform no external I/O.
+  The strict
+  `python-flask-static-allowlist-open-redirect-manifest.json` requires polarity,
+  immutable policy, source, sink, fallback, and CWE-601 evidence. The canonical
+  corpus advances to 202 pairs, 404 cases, and 1,212 repeated scan positions.
+- Focused Flask, canonical, and Rust bookkeeping acceptance passes 64 tests
+  with 3,137 assertions. Full local, package, GUI, Linux, hosted, and immutable
+  checkpoint evidence follows in a separate acceptance entry.
 - Closed two measured cross-file Flask nested-Blueprint false negatives. A
   child imported into a parent Blueprint and mounted either on a same-file
   application or through a second relative import into `create_app` emitted no

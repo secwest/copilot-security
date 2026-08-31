@@ -111,7 +111,13 @@ or unresolved Blueprint declaration, a renamed or decorated factory, a missing
 application return, local lookalikes, unsupported collections, opaque
 transformations, or ambiguous arguments. A non-root fixed local prefix is a
 control; a root-only `"/" + value` is not, because a value beginning with slash
-becomes a scheme-relative `//attacker.invalid/...` redirect. Separate pinned
+becomes a scheme-relative `//attacker.invalid/...` redirect. An exact positive
+membership guard over the same redirect value is also a
+control when one stable uppercase binding is assigned exactly once to an
+immutable top-level tuple of literal destinations and the guard directly
+dominates the sink. Inverted `not in` membership and mutable, dynamic, rebound,
+function-scoped, compound, non-dominating, or nested shapes remain reportable.
+Separate pinned
 Flask/Werkzeug application-query, same-file Blueprint, nested Blueprint, nested
 application-factory Blueprint, cross-file application-factory Blueprint, and POST-form pairs use
 `follow_redirects=False` and inspect only the emitted Location. Flask documents
@@ -123,6 +129,10 @@ Blueprint is registered, while the maintained
 [application-factory pattern](https://flask.palletsprojects.com/en/stable/patterns/appfactories/)
 and [Blueprint tutorial](https://flask.palletsprojects.com/en/stable/tutorial/views/)
 show the cross-module import, registration, and return sequence.
+CodeQL's maintained
+[Python open-redirect guidance](https://codeql.github.com/codeql-query-help/python/py-url-redirection/)
+also identifies restriction to a server-owned set of known destinations as a
+valid control.
 Registered Django function and class-based views now have the same typed
 treatment without collapsing the frameworks into a name-matched rule. The
 Django model requires an official `path` or `re_path` call inside the sole

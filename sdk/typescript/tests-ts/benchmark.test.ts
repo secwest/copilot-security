@@ -693,6 +693,10 @@ describe("effectiveness benchmark", () => {
         "python-flask-cross-file-nested-blueprint-factory-safe-local-redirect",
       ],
       [
+        "python-flask-inverted-static-allowlist-open-redirect",
+        "python-flask-static-allowlist-safe-redirect",
+      ],
+      [
         "python-flask-post-open-redirect",
         "python-flask-post-safe-local-redirect",
       ],

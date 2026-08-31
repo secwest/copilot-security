@@ -43248,6 +43248,94 @@ function pythonFlaskRedirectSink(
   return undefined;
 }
 
+function pythonFlaskImmutableRedirectAllowlistGuard(
+  lines: readonly string[],
+  wrapper: ExportedPythonFunction,
+  sinkLine: number,
+  sourceExpression: string,
+): boolean {
+  const structuralLines = pythonStructuralLines(lines);
+  const sinkIndent = /^(\s*)/u.exec(structuralLines[sinkLine - 1] ?? "")?.[1]
+    ?.length;
+  if (sinkIndent === undefined) return false;
+
+  for (let index = sinkLine - 2; index >= wrapper.startLine; index -= 1) {
+    const guard =
+      /^(\s*)if\s+([A-Za-z_]\w*)\s+in\s+([A-Z][A-Z0-9_]*)\s*:\s*$/u.exec(
+        structuralLines[index] ?? "",
+      );
+    if (
+      guard?.[1] === undefined ||
+      guard[2] === undefined ||
+      guard[3] === undefined
+    ) {
+      continue;
+    }
+    const guardIndent = guard[1].length;
+    if (guardIndent >= sinkIndent) continue;
+
+    let directSuiteIndent: number | undefined;
+    let containsSink = true;
+    for (let offset = index + 1; offset < sinkLine; offset += 1) {
+      const candidate = structuralLines[offset] ?? "";
+      if (candidate.trim() === "") continue;
+      const indentation = /^(\s*)/u.exec(candidate)?.[1]?.length;
+      if (indentation === undefined || indentation <= guardIndent) {
+        containsSink = false;
+        break;
+      }
+      directSuiteIndent ??= indentation;
+    }
+    if (
+      !containsSink ||
+      directSuiteIndent === undefined ||
+      sinkIndent !== directSuiteIndent
+    ) {
+      continue;
+    }
+
+    const checked =
+      resolvePythonExpression(lines, guard[2], index + 1) ?? guard[2];
+    if (
+      checked.replace(/\s+/gu, "") !== sourceExpression.replace(/\s+/gu, "")
+    ) {
+      continue;
+    }
+
+    const allowlist = guard[3];
+    const allowlistPattern = escapeRegularExpression(allowlist);
+    const assignments: Array<{ line: number; values: string }> = [];
+    for (let line = 1; line <= index; line += 1) {
+      const assignment = new RegExp(
+        `^${allowlistPattern}\\s*(?::[^=]+)?=\\s*\\(([\\s\\S]*)\\)\\s*$`,
+        "u",
+      ).exec(pythonCodeBeforeComment(lines[line - 1] ?? ""));
+      if (assignment?.[1] !== undefined) {
+        assignments.push({ line, values: assignment[1] });
+      }
+    }
+    if (assignments.length !== 1) continue;
+    const assignment = assignments[0]!;
+    const values = splitPythonArguments(assignment.values);
+    if (
+      values.length < 2 ||
+      values.some(
+        (value) => pythonLiteralStringValue(value.trim()) === undefined,
+      ) ||
+      !pythonImportedBindingUnchangedBetween(
+        lines,
+        allowlist,
+        assignment.line,
+        sinkLine,
+      )
+    ) {
+      continue;
+    }
+    return true;
+  }
+  return false;
+}
+
 function pythonFlaskOpenRedirectSource(
   files: readonly SourceFileSnapshot[],
   path: string,
@@ -43295,6 +43383,16 @@ function pythonFlaskOpenRedirectSource(
         ) === index,
     );
   if (sources.length !== 1) return undefined;
+  if (
+    pythonFlaskImmutableRedirectAllowlistGuard(
+      lines,
+      wrapper,
+      callLine,
+      resolved,
+    )
+  ) {
+    return undefined;
+  }
   if (sources[0]!.kind === "flask-request-form-string") {
     if (!routeEvidence.allowsForm || routeEvidence.formMethod === undefined) {
       return undefined;

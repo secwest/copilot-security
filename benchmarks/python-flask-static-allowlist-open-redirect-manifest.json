@@ -1,0 +1,90 @@
+{
+  "schemaVersion": "1.0",
+  "thresholds": {
+    "minCompletionRate": 1,
+    "minPrecision": 1,
+    "minRecall": 1,
+    "minF1": 1,
+    "minCasePassRate": 1,
+    "minNegativeCasePassRate": 1,
+    "minStableDetectionRate": 1,
+    "minValidationRate": 1,
+    "minAttackPathRate": 1,
+    "minCodeEvidenceRate": 1,
+    "minSeverityAccuracy": 1,
+    "maxFalsePositivesPerRun": 0
+  },
+  "cases": [
+    {
+      "id": "python-flask-inverted-static-allowlist-open-redirect",
+      "description": "A Flask query value is redirected only when it is not in an immutable server-owned allowlist, so an attacker-selected absolute origin reaches Location.",
+      "fixture": "fixtures/python-flask-inverted-static-allowlist-open-redirect",
+      "findingsPaths": [
+        "python-flask-inverted-static-allowlist-open-redirect/run-1/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "python-flask-open-redirect",
+          "cwe": ["CWE-601"],
+          "locations": [
+            {
+              "path": "src/server.py",
+              "startLine": 8,
+              "endLine": 8,
+              "lineTolerance": 1
+            }
+          ],
+          "acceptableSeverities": ["high", "medium"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true,
+          "requiredValidationTextAnyOf": [
+            ["Flask route", "app.get", "GET /continue"],
+            ["request.args", "query string", "next"],
+            ["not in", "inverted membership", "negative membership"],
+            ["immutable tuple", "static allowlist", "ALLOWED_REDIRECTS"],
+            ["flask.redirect", "Location header", "redirect target"],
+            ["fixed fallback", "/account", "server-owned fallback"],
+            ["CWE-601", "open redirect"]
+          ],
+          "requiredAttackPathTextAnyOf": [
+            ["GET /continue", "Flask route", "app.get"],
+            ["request.args", "next", "query value"],
+            [
+              "not in ALLOWED_REDIRECTS",
+              "inverted allowlist",
+              "negative membership"
+            ],
+            ["redirect(target", "flask.redirect", "redirect helper"],
+            ["Location", "absolute URL", "external origin"],
+            [
+              "attacker.invalid",
+              "attacker-selected origin",
+              "campaign=flask-allowlist"
+            ],
+            ["follow_redirects=False", "does not follow", "no external request"]
+          ],
+          "forbiddenText": [
+            "the allowlist makes the redirect safe",
+            "not in validates the target",
+            "mutable allowlists are inherently trusted",
+            "dynamic allowlist entries are proven safe",
+            "rebound allowlists are proven stable",
+            "the witness contacted attacker.invalid",
+            "every Flask redirect is vulnerable",
+            "the host is fully compromised"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "python-flask-static-allowlist-safe-redirect",
+      "description": "The topology-matched Flask control redirects only exact members of an immutable server-owned tuple and otherwise uses a fixed local fallback.",
+      "fixture": "fixtures/python-flask-static-allowlist-safe-redirect",
+      "findingsPaths": [
+        "python-flask-static-allowlist-safe-redirect/run-1/findings.json"
+      ],
+      "expected": []
+    }
+  ]
+}

@@ -2,6 +2,53 @@
 
 This log records consequential implementation decisions, their evidence, and the tradeoffs that future scanner work must preserve.
 
+## 2026-08-31 — Prove immutable Flask redirect allowlists without hiding inverted policy
+
+**Measured gap.** A topology-matched Flask route assigned one query field to
+`target`, guarded `redirect(target)` with positive membership in the immutable
+top-level tuple `ALLOWED_REDIRECTS = ("/account", "/help")`, and otherwise used
+a fixed local fallback. The unchanged model reported the safe redirect. The 35
+preceding Flask tests passed; only the new control failed, producing 35 pass, 1
+fail, and 240 assertions. CodeQL's maintained
+[Python open-redirect guidance](https://codeql.github.com/codeql-query-help/python/py-url-redirection/)
+identifies a server-owned allowlist as a valid destination restriction, so the
+noise represented a useful precision gap rather than an unsupported sanitizer.
+
+**Bounded decision.** Suppress only an exact positive `in` guard that is an
+ancestor of the sink and whose direct suite contains the sink without another
+conditional layer. Resolve the checked identifier at the guard and require it
+to equal the already proved request-derived redirect expression. The policy
+must be one uppercase binding assigned exactly once before the guard by a
+top-level, single-line tuple containing at least two literal strings; that
+binding must remain unchanged through the sink. Literal parsing uses the
+original comment-stripped source because structural Python lines intentionally
+blank string contents.
+
+**Fail-closed boundary.** Fourteen negative shapes pin what the proof does not
+claim: `not in`, a list, set, parenthesized string, one-element tuple, dynamic
+tuple element, lowercase or duplicate binding, compound predicate, a different
+request value, a guard that does not dominate, a sink nested under another
+condition, a function-scoped allowlist, and a multiline tuple. Each remains a
+CWE-601 row. This deliberately leaves semantically safe but harder-to-prove
+policies visible rather than broadening a regex into unbounded dataflow or
+mutable-state reasoning.
+
+**Executable evidence.** Source-matched fixtures pin Flask 3.1.3 and Werkzeug
+3.1.8. The exploit reverses the condition to `target not in
+ALLOWED_REDIRECTS`, so the hostile absolute URL becomes the emitted Location.
+The control uses positive membership and selects the fixed `/account` fallback.
+Both TestClient witnesses set `follow_redirects=False`, record attacker-origin
+selections one and zero, and perform no external request. The dedicated
+perfect-gate manifest requires the route, query source, polarity, immutable
+tuple, Location boundary, fallback, and CWE-601 while forbidding claims that
+negative membership or mutable, dynamic, or rebound policy is protective.
+
+**Initial acceptance.** Focused Flask, canonical-manifest, and Rust bookkeeping
+acceptance passes 64 tests and 3,137 assertions. The canonical corpus advances
+to 202 exploit/control pairs, 404 cases, and 1,212 repeated scan positions.
+Full distribution, GUI, Linux, hosted, and immutable-checkpoint evidence will
+be appended after that closure is complete.
+
 ## 2026-08-30 — Bound cross-file nested Blueprint reachability
 
 **Measured gap.** The unchanged host emitted zero rows for two maintained Flask

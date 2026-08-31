@@ -71,6 +71,50 @@ describe("Flask open-redirect model", () => {
     expect(manifest.cases[1].expected).toEqual([]);
   });
 
+  test("keeps a strict static-allowlist polarity contract", async () => {
+    const manifest = JSON.parse(
+      await readFile(
+        join(
+          benchmarkRoot,
+          "python-flask-static-allowlist-open-redirect-manifest.json",
+        ),
+        "utf8",
+      ),
+    );
+    expect(manifest.schemaVersion).toBe("1.0");
+    expect(
+      Object.values(manifest.thresholds).every(
+        (value) => value === 0 || value === 1,
+      ),
+    ).toBeTrue();
+    expect(manifest.cases.map(({ id }: { id: string }) => id)).toEqual([
+      "python-flask-inverted-static-allowlist-open-redirect",
+      "python-flask-static-allowlist-safe-redirect",
+    ]);
+    expect(manifest.cases[0].expected[0]).toMatchObject({
+      id: modelId,
+      cwe: ["CWE-601"],
+      requireValidation: true,
+      requireAttackPath: true,
+      requireCodeEvidence: true,
+    });
+    expect(manifest.cases[0].expected[0].requiredValidationTextAnyOf).toEqual(
+      expect.arrayContaining([
+        expect.arrayContaining(["not in"]),
+        expect.arrayContaining(["immutable tuple"]),
+        expect.arrayContaining(["fixed fallback"]),
+      ]),
+    );
+    expect(manifest.cases[0].expected[0].forbiddenText).toEqual(
+      expect.arrayContaining([
+        "not in validates the target",
+        "mutable allowlists are inherently trusted",
+        "rebound allowlists are proven stable",
+      ]),
+    );
+    expect(manifest.cases[1].expected).toEqual([]);
+  });
+
   test("keeps a strict POST form exploit/control benchmark contract", async () => {
     const manifest = JSON.parse(
       await readFile(
@@ -342,6 +386,38 @@ describe("Flask open-redirect model", () => {
         kind: "flask-redirect-location",
         path: "src/server.py",
         line: 9,
+        cweIds: ["CWE-601"],
+      },
+    });
+    expect(controlModels).toHaveLength(0);
+  });
+
+  test("separates inverted and positive immutable allowlist membership", async () => {
+    const exploit = join(
+      benchmarkRoot,
+      "fixtures",
+      "python-flask-inverted-static-allowlist-open-redirect",
+    );
+    const control = join(
+      benchmarkRoot,
+      "fixtures",
+      "python-flask-static-allowlist-safe-redirect",
+    );
+    const exploitModels = models(await buildResidualRiskInventory(exploit));
+    const controlModels = models(await buildResidualRiskInventory(control));
+
+    expect(exploitModels).toHaveLength(1);
+    expect(exploitModels[0]).toMatchObject({
+      scope: "same-file",
+      source: {
+        kind: "flask-request-query-string",
+        path: "src/server.py",
+        line: 8,
+      },
+      sink: {
+        kind: "flask-redirect-location",
+        path: "src/server.py",
+        line: 8,
         cweIds: ["CWE-601"],
       },
     });
@@ -1810,6 +1886,169 @@ describe("Flask open-redirect model", () => {
     }
   });
 
+  test("distinguishes an inverted redirect allowlist from an immutable allowlist", async () => {
+    const source = (operator: "in" | "not in") =>
+      [
+        "from flask import Flask, redirect, request",
+        'ALLOWED_REDIRECTS = ("/account", "/help")',
+        "app = Flask(__name__)",
+        '@app.get("/continue")',
+        "def continue_to():",
+        '    target = request.args.get("next", "")',
+        `    if target ${operator} ALLOWED_REDIRECTS:`,
+        "        return redirect(target, code=307)",
+        '    return redirect("/account", code=307)',
+        "",
+      ].join("\n");
+    const exploit = await mkdtemp(join(tmpdir(), "flask-allowlist-exploit-"));
+    const control = await mkdtemp(join(tmpdir(), "flask-allowlist-control-"));
+    try {
+      await writeRepository(exploit, { "server.py": source("not in") });
+      await writeRepository(control, { "server.py": source("in") });
+
+      const exploitModels = models(await buildResidualRiskInventory(exploit));
+      const controlModels = models(await buildResidualRiskInventory(control));
+      expect(exploitModels).toHaveLength(1);
+      expect(exploitModels[0].sink).toMatchObject({
+        kind: "flask-redirect-location",
+        path: "server.py",
+        line: 8,
+        cweIds: ["CWE-601"],
+      });
+      expect(controlModels).toHaveLength(0);
+    } finally {
+      await rm(exploit, { recursive: true, force: true });
+      await rm(control, { recursive: true, force: true });
+    }
+  });
+
+  test("fails closed on unproved redirect allowlist guards", async () => {
+    const safe = [
+      "from flask import Flask, redirect, request",
+      'ALLOWED_REDIRECTS = ("/account", "/help")',
+      "app = Flask(__name__)",
+      '@app.get("/continue")',
+      "def continue_to():",
+      '    target = request.args.get("next", "")',
+      "    if target in ALLOWED_REDIRECTS:",
+      "        return redirect(target, code=307)",
+      '    return redirect("/account", code=307)',
+      "",
+    ].join("\n");
+    const variants: ReadonlyArray<readonly [string, string]> = [
+      ["negative-membership", safe.replace(" in ALLOWED", " not in ALLOWED")],
+      [
+        "mutable-list",
+        safe.replace(
+          'ALLOWED_REDIRECTS = ("/account", "/help")',
+          'ALLOWED_REDIRECTS = ["/account", "/help"]',
+        ),
+      ],
+      [
+        "mutable-set",
+        safe.replace(
+          'ALLOWED_REDIRECTS = ("/account", "/help")',
+          'ALLOWED_REDIRECTS = {"/account", "/help"}',
+        ),
+      ],
+      [
+        "single-parenthesized-string",
+        safe.replace(
+          'ALLOWED_REDIRECTS = ("/account", "/help")',
+          'ALLOWED_REDIRECTS = ("/account")',
+        ),
+      ],
+      [
+        "single-element-tuple",
+        safe.replace(
+          'ALLOWED_REDIRECTS = ("/account", "/help")',
+          'ALLOWED_REDIRECTS = ("/account",)',
+        ),
+      ],
+      [
+        "dynamic-tuple-element",
+        safe.replace(
+          'ALLOWED_REDIRECTS = ("/account", "/help")',
+          'fallback = "/help"\nALLOWED_REDIRECTS = ("/account", fallback)',
+        ),
+      ],
+      [
+        "lowercase-binding",
+        safe.replaceAll("ALLOWED_REDIRECTS", "allowed_redirects"),
+      ],
+      [
+        "duplicate-binding",
+        safe.replace(
+          "app = Flask(__name__)",
+          'ALLOWED_REDIRECTS = ("/other", "/safe")\napp = Flask(__name__)',
+        ),
+      ],
+      [
+        "compound-predicate",
+        safe.replace(
+          "if target in ALLOWED_REDIRECTS:",
+          'if target in ALLOWED_REDIRECTS and request.args.get("enabled"):',
+        ),
+      ],
+      [
+        "different-request-value",
+        safe
+          .replace(
+            '    target = request.args.get("next", "")',
+            '    target = request.args.get("next", "")\n    candidate = request.args.get("candidate", "")',
+          )
+          .replace(
+            "if target in ALLOWED_REDIRECTS:",
+            "if candidate in ALLOWED_REDIRECTS:",
+          ),
+      ],
+      [
+        "non-dominating-guard",
+        safe.replace(
+          "    if target in ALLOWED_REDIRECTS:\n        return redirect(target, code=307)",
+          "    if target in ALLOWED_REDIRECTS:\n        pass\n    return redirect(target, code=307)",
+        ),
+      ],
+      [
+        "nested-sink",
+        safe.replace(
+          "    if target in ALLOWED_REDIRECTS:\n        return redirect(target, code=307)",
+          '    if target in ALLOWED_REDIRECTS:\n        if request.args.get("enabled"):\n            return redirect(target, code=307)',
+        ),
+      ],
+      [
+        "function-scoped-allowlist",
+        safe
+          .replace('ALLOWED_REDIRECTS = ("/account", "/help")\n', "")
+          .replace(
+            "def continue_to():",
+            'def continue_to():\n    ALLOWED_REDIRECTS = ("/account", "/help")',
+          ),
+      ],
+      [
+        "multiline-tuple",
+        safe.replace(
+          'ALLOWED_REDIRECTS = ("/account", "/help")',
+          'ALLOWED_REDIRECTS = (\n    "/account",\n    "/help",\n)',
+        ),
+      ],
+    ];
+
+    for (const [name, server] of variants) {
+      const root = await mkdtemp(
+        join(tmpdir(), `flask-allowlist-negative-${name}-`),
+      );
+      try {
+        await writeRepository(root, { "server.py": server });
+        const detected = models(await buildResidualRiskInventory(root));
+        expect(detected, name).toHaveLength(1);
+        expect(detected[0].sink.cweIds, name).toEqual(["CWE-601"]);
+      } finally {
+        await rm(root, { recursive: true, force: true });
+      }
+    }
+  });
+
   test("detects a root-only local prefix but rejects an encoded fixed-local control", async () => {
     const exploit = await mkdtemp(join(tmpdir(), "flask-root-prefix-exploit-"));
     const control = await mkdtemp(join(tmpdir(), "flask-root-prefix-control-"));
@@ -2251,6 +2490,10 @@ describe("Flask open-redirect model", () => {
     expect(prompt).toContain("flask.redirect");
     expect(prompt).toContain("Location");
     expect(prompt).toContain("root-only");
+    expect(prompt).toContain("positive in membership");
+    expect(prompt).toContain("immutable top-level tuple");
+    expect(prompt).toContain("not in");
+    expect(prompt).toContain("mutable, dynamic, rebound");
     expect(prompt).toContain("follow_redirects=False");
     expect(prompt).toContain("CWE-601");
   });

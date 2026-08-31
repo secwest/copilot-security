@@ -3084,7 +3084,8 @@ The dedicated `python-flask-open-redirect-manifest.json`,
 `python-flask-post-open-redirect-manifest.json`, plus the dedicated
 `python-flask-nested-blueprint-open-redirect-manifest.json` and
 `python-flask-nested-blueprint-factory-open-redirect-manifest.json` and
-`python-flask-cross-file-nested-blueprint-factory-open-redirect-manifest.json`, add
+`python-flask-cross-file-nested-blueprint-factory-open-redirect-manifest.json`,
+plus `python-flask-static-allowlist-open-redirect-manifest.json`, add
 independent Flask root-prefix pairs. The first reads one literal `request.args` field from an
 application GET shortcut. The second reads the same collection from an exact
 official Blueprint GET route and requires a later top-level
@@ -3103,11 +3104,17 @@ The seventh spreads the child route, parent Blueprint, and application factory
 across three modules. It requires exact relative imports at both cross-file
 boundaries and uses registration-time `/child` and `/root` overrides to prove
 the effective `/root/child/continue` route.
-Each exploit prepends only `/`
-and passes the result to the official `flask.redirect`; the leading slash in
+The eighth isolates allowlist polarity. Its exploit uses `not in` and therefore
+redirects the hostile absolute URL, while its control uses positive membership
+in a stable immutable top-level tuple and reaches the fixed `/account`
+fallback.
+The first seven exploits prepend only `/`
+and pass the result to the official `flask.redirect`; the leading slash in
 the supplied value produces a scheme-relative `//attacker.invalid/...`
 Location. Each topology-matched control percent-encodes the same value below
-the non-root fixed `/continue?next=` target. All fixtures pin Flask 3.1.3 and
+the non-root fixed `/continue?next=` target. The eighth sends the selected
+absolute URL directly on inverted membership and falls back to `/account` on
+positive membership. All fixtures pin Flask 3.1.3 and
 Werkzeug 3.1.8, disable redirect following, and make no external request.
 
 The model accepts form data only for exact POST, PUT, or PATCH shortcuts or a
@@ -3125,7 +3132,15 @@ dynamic-prefix, other configured, or multiple Blueprint registrations, self-
 nesting, recursive or multi-level nesting, unstable parent/application members,
 dynamic or multiple decorators, GET/default/DELETE form mismatches, dynamic method
 collections, ambiguous redirect roles, unsupported request collections, and
-opaque calls:
+opaque calls.
+
+The allowlist control is intentionally narrower than name matching. It requires
+the exact request-derived redirect value, a direct dominating positive `in`
+guard, and one stable uppercase binding assigned exactly once to a single-line
+top-level tuple containing at least two literal strings. Negative membership,
+lists and sets, single/dynamic/multiline tuples, lowercase, duplicate,
+function-scoped or rebound bindings, compound or non-dominating predicates,
+different checked values, and nested sinks remain findings.
 
 ```powershell
 node ../../benchmarks/run-benchmark.mjs `
@@ -3145,7 +3160,8 @@ Run a Blueprint- or form-specific gate by substituting
 `python-flask-nested-blueprint-open-redirect-manifest.json`, or
 `python-flask-nested-blueprint-factory-open-redirect-manifest.json`,
 `python-flask-cross-file-nested-blueprint-factory-open-redirect-manifest.json`, or
-`python-flask-post-open-redirect-manifest.json` and a separate results directory
+`python-flask-post-open-redirect-manifest.json`, or
+`python-flask-static-allowlist-open-redirect-manifest.json` and a separate results directory
 in the same command. Flask's maintained documentation explains that a
 [Blueprint records routes that become live when registered on an application](https://flask.palletsprojects.com/en/stable/blueprints/),
 and its [application-factory pattern](https://flask.palletsprojects.com/en/stable/patterns/appfactories/)
