@@ -66,7 +66,19 @@ Ubuntu/WSL passes locked restore, zero-warning/error build, 7/7 core, 3/3
 shared, 2/2 Linux UI, non-graphical startup, and real X11/Xvfb startup; its
 72,568-byte executable has SHA-256
 `7e29d642169a6c218c249216c6c10648307aea88faf636b69ac25741104b4adf`.
-Hosted and immutable-checkpoint evidence follows the pushed implementation.
+
+**Hosted and immutable closure.** Exact implementation checkpoint
+`09678fc358b8c4775ba085c6a3ac7e6453204f26` has a 3,793,776-byte tracked
+source archive with SHA-256
+`070fe4d67b2afd909c527942b4c9c8fc7be2b0ee3a4b81e32200e479f0556bfc`.
+All 11 workflow families pass on the first attempt: Node `33364332193` with
+92/92 jobs, container `33364332119`, Windows GUI `33364332084`, Linux GUI
+`33364332152`, .NET `33364332145`, Go `33364332127`, Java `33364332220`, Kotlin
+`33364332160`, PHP `33364332129`, Ruby `33364332146`, and Rust `33364332080`.
+The dedicated Python witness job passes the new exploit and control on the
+hosted pinned runtime. GitHub reports the repository public with default branch
+`main`; temporary archives, package installations, and GUI publications were
+removed after their evidence was recorded.
 
 ## 2026-08-30 — Close same-file Blueprint application-factory reachability
 

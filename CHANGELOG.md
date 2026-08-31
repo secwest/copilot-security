@@ -48,6 +48,16 @@ All notable scanner, application, benchmark, and operational changes are recorde
   3/3 shared, and 2/2 Linux UI tests pass, followed by non-graphical and real
   X11/Xvfb startup. The 72,568-byte Linux executable has SHA-256
   `7e29d642169a6c218c249216c6c10648307aea88faf636b69ac25741104b4adf`.
+- Exact implementation checkpoint
+  `09678fc358b8c4775ba085c6a3ac7e6453204f26` has a 3,793,776-byte tracked
+  source archive with SHA-256
+  `070fe4d67b2afd909c527942b4c9c8fc7be2b0ee3a4b81e32200e479f0556bfc`.
+  All 11 hosted workflow families pass on the first attempt: Node
+  `33364332193` (92/92 jobs), container `33364332119`, Windows GUI
+  `33364332084`, Linux GUI `33364332152`, .NET `33364332145`, Go
+  `33364332127`, Java `33364332220`, Kotlin `33364332160`, PHP `33364332129`,
+  Ruby `33364332146`, and Rust `33364332080`. The repository remains public on
+  default branch `main`.
 - Closed two measured same-file Flask application-factory false negatives. An
   official Blueprint mounted directly inside `create_app` and an official child
   Blueprint mounted on a parent whose final application mount occurred inside
