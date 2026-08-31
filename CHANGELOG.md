@@ -27,10 +27,38 @@ All notable scanner, application, benchmark, and operational changes are recorde
   witnesses prove attacker-origin selections of one and zero without external
   I/O. The canonical corpus advances to 197 pairs, 394 cases, and 1,182 repeated
   scan positions.
-- Initial focused acceptance passes 40 Flask, canonical, and Rust bookkeeping
-  tests with 2,902 assertions. Both exact-version Blueprint witnesses pass.
-  Full aggregate, package, GUI, hosted, and immutable-checkpoint evidence
-  follows after the implementation checkpoint.
+- Focused acceptance passes 40 Flask, canonical, and Rust bookkeeping tests
+  with 2,902 assertions. Both exact-version Blueprint witnesses pass.
+- Exact implementation checkpoint
+  `3733581ed0f41c552fa7123aebfc90fdc193741c` has a 3,768,555-byte tracked
+  source archive with SHA-256
+  `c9e2b76045657d5cef7c0a07fb646d75834f82f34503a81905c1fdfb1d23096a`.
+  Two independent 299-entry npm packages are byte-identical at 2,480,477 bytes
+  with SHA-256
+  `f522514891c5f80e61586994993f5faf986e63cd24671aea3bbf967423c94bfe`;
+  a fresh 67-package install validates the public API, CLI, and all 79 bundled
+  plugin files. The production high-severity dependency audit is clean.
+- Full local acceptance runs 2,165 tests across 218 files: 2,132 pass, 31
+  intentional platform/integration skips, and only two expected managed-sandbox
+  failures. Both affected files pass natively at 48/48 tests and 242 assertions.
+  All Python lanes pass 232 tests with eight intentional skips and 1,526
+  assertions; formatting, types, and build pass.
+- Windows GUI acceptance builds with zero warnings/errors, passes 7/7 core and
+  3/3 shared tests, and publishes a 346,796-byte executable with SHA-256
+  `022f2cf49049ed87546ee3a3ea25d095d9e491cd2e88e0705541f37103416ad0`.
+  Ubuntu/WSL locked restore and build also have zero warnings/errors; 7/7 core,
+  3/3 shared, and 2/2 Linux UI tests pass, as do non-graphical and X11/Xvfb
+  startup. The 72,568-byte Linux executable has SHA-256
+  `7e29d642169a6c218c249216c6c10648307aea88faf636b69ac25741104b4adf`.
+- A tracked-only clone of the exact checkpoint passes deep/xhigh dry-run
+  preflight with three fresh-session attempts, scanner-owned output, no
+  `GH_TOKEN`, and stored Copilot credentials. This was deliberately a dry run,
+  so it is not evidence of a completed model scan or a clean self-scan.
+- All 11 hosted workflow families pass at `3733581`: Node `33343372972`
+  (92/92 jobs), container `33343372989`, Windows GUI `33343373001`, Linux GUI
+  `33343372983`, .NET `33343372996`, Go `33343372965`, Java `33343372963`,
+  Kotlin `33343372947`, PHP `33343372956`, Ruby `33343372944`, and Rust
+  `33343372975`.
 - Closed a measured Flask form-redirect false negative. Before the host change,
   an official `@app.post` handler whose `request.form.get("next")` value reached
   `flask.redirect` emitted zero rows while all eight previous Flask regressions

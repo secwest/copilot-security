@@ -45,8 +45,41 @@ request. The strict dedicated manifest requires Blueprint route and application
 mount evidence in both validation and attack path. The canonical corpus advances
 to 197 pairs, 394 cases, and 1,182 repeated positions. Focused Flask, canonical,
 and Rust bookkeeping acceptance passes 40 tests and 2,902 assertions; both
-exact-version witnesses record attacker-origin selections one and zero. Full
-acceptance follows at the immutable implementation checkpoint.
+exact-version witnesses record attacker-origin selections one and zero.
+
+**Checkpoint evidence.** Exact implementation checkpoint
+`3733581ed0f41c552fa7123aebfc90fdc193741c` has a 3,768,555-byte tracked
+archive (SHA-256
+`c9e2b76045657d5cef7c0a07fb646d75834f82f34503a81905c1fdfb1d23096a`).
+Two independently produced 299-entry npm packages are byte-identical at
+2,480,477 bytes (SHA-256
+`f522514891c5f80e61586994993f5faf986e63cd24671aea3bbf967423c94bfe`),
+and a fresh 67-package install validates the public import, CLI, and 79 bundled
+plugin files. The production high-severity dependency audit is clean.
+
+Full local acceptance runs 2,165 tests across 218 files: 2,132 pass, 31 are
+intentional platform/integration skips, and the only two failures are the known
+managed-sandbox Git-binding and Windows-ACL probes. The complete affected files
+pass natively at 48/48 tests and 242 assertions. Python acceptance passes 232
+tests with eight intentional skips and 1,526 assertions. Formatting, types, and
+build pass. Windows acceptance has zero warnings/errors, 7/7 core tests, 3/3
+shared tests, and a 346,796-byte executable (SHA-256
+`022f2cf49049ed87546ee3a3ea25d095d9e491cd2e88e0705541f37103416ad0`).
+Ubuntu/WSL locked acceptance has zero warnings/errors, 7/7 core, 3/3 shared,
+2/2 Linux UI tests, both startup smokes, and a 72,568-byte executable (SHA-256
+`7e29d642169a6c218c249216c6c10648307aea88faf636b69ac25741104b4adf`).
+
+A clean tracked-only clone of that full SHA passes deep/xhigh dry-run preflight
+with three fresh-session attempts, scanner-owned output, `GH_TOKEN` absent, and
+stored Copilot credentials selected. That check does not invoke a model and is
+therefore recorded only as configuration and target-isolation evidence, not as
+a completed or clean self-scan.
+
+All eleven hosted workflow families pass on the checkpoint. Node run
+`33343372972` passes 92/92 jobs; container `33343372989`, Windows GUI
+`33343373001`, Linux GUI `33343372983`, .NET `33343372996`, Go `33343372965`,
+Java `33343372963`, Kotlin `33343372947`, PHP `33343372956`, Ruby `33343372944`,
+and Rust `33343372975` also complete successfully.
 
 ## 2026-08-30 — Bind Flask form sources to exact route methods
 
