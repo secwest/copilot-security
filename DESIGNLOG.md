@@ -63,8 +63,10 @@ witnesses pass. Twenty-two focused tests with 48 assertions cover all five
 route source shapes, Vue Router 4 and 5, ESM/namespace/CommonJS bindings,
 literal bracket members, SFC handling, bounded propagation, request-boundary
 controls, model-specific evidence quality, reviewer instructions, and thirteen
-families of rejected shapes. The adjacent typed-model and canonical-corpus
-lane passes 47 tests and 2,958 assertions. The canonical manifest now contains
+families of rejected shapes. A twenty-third regression writes the same SFC
+with CRLF and proves that normalized call parsing retains exact source and sink
+lines. The adjacent typed-model and canonical-corpus
+lane passes 48 tests and 2,960 assertions. The canonical manifest now contains
 207 exploit/control pairs, 414 cases, and 1,242 repeated scan positions.
 
 **Acceptance evidence.** The authoritative suite executes 2,276 tests across
@@ -73,8 +75,8 @@ intentionally skip; its two unchanged Git-fixture and Windows-home-ACL failures
 pass under native rerun, producing 2,245 logical passes and no product failure.
 Formatting, generated-model drift, TypeScript, clean production build, and the
 production high-severity advisory audit pass. Two 299-entry archives are
-byte-identical at 2,486,535 bytes with SHA-256
-`988a66416d6de0919ed07db728a3f4ed64189bef425a03527dd28cab283a74c8`;
+byte-identical at 2,486,550 bytes with SHA-256
+`53c73e295a3983ea9469725336f0f9a4a60b58645f68489c0efd6fb5c1b6c19b`;
 strict inspection and isolated installation validate 67 production packages,
 public import, the CLI, and all 79 bundled plugin files. Two compiled repository
 inventories are byte-identical at 256 rows and 639,189 bytes with SHA-256
@@ -88,6 +90,18 @@ tests, and passes non-graphical and X11/Xvfb startup; its 72,568-byte executable
 has SHA-256
 `7e29d642169a6c218c249216c6c10648307aea88faf636b69ac25741104b4adf`.
 The continuing effectiveness goal remains active.
+
+**Hosted portability correction.** The first public checkpoint passed 91/92
+Node jobs and all ten other workflow families, but its Windows Node 22 job
+failed the two disk-fixture-dependent Vue tests while every synthetic Vue case
+passed. Windows checkout converted the new, previously unclassified `.vue`
+files to CRLF. `javascriptCallsInText` received raw CRLF source while its
+structural twin was rebuilt from split lines with LF, so byte offsets after the
+first line no longer selected the matching source call. The model now passes
+the same normalized line join for both strings, a generated CRLF SFC regression
+keeps that real-world format covered, and `.gitattributes` makes repository
+fixture bytes deterministic. Hosted evidence must come from the corrected
+checkpoint rather than treating the first run as green.
 
 ## 2026-08-31 — Discard findings whose evidence contradicts repository bytes
 

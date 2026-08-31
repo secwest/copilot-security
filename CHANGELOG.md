@@ -22,28 +22,34 @@ All notable scanner, application, benchmark, and operational changes are recorde
   flow into argument zero of the unchanged built-in `fetch`, `window.fetch`,
   or `globalThis.fetch` boundary. The reviewer contract now requires the same
   dependency, source, URL-resolution, sink, control, and CWE-918 evidence.
+- Normalized Vue call-parser input to its LF structural representation after
+  the first hosted Windows Node 22 run exposed a raw-CRLF/normalized-LF offset
+  mismatch. The disk fixture and quality-contract tests had emitted no model
+  row only on that checkout; all synthetic source forms and the other 91 Node
+  jobs passed. A dedicated CRLF `<script setup>` regression now preserves
+  exact source/sink line mapping, and tracked `.vue` fixtures use explicit LF.
 - Preserved fixed query/fragment boundaries and direct `encodeURIComponent`
   as request-forgery controls. Vue Router 3, development-only or unresolved
   dependencies, local lookalikes, rebound APIs or route members, imported or
   shadowed `fetch`, nonzero/body-only arguments, unsupported members,
   top-level non-SFC code, tests/examples, and opaque transformations fail
-  closed. Twenty-two focused regressions with 48 assertions cover these
-  positive and negative boundaries; the adjacent model/corpus gate passes 47
-  tests and 2,958 assertions.
+  closed. Twenty-three focused regressions with 50 assertions cover these
+  positive and negative boundaries; the adjacent model/corpus gate passes 48
+  tests and 2,960 assertions.
 - Added a pinned Vue Router 5.2.0 exploit/control pair, a specialized manifest,
   and offline URL-resolution witnesses. The fixed twin keeps `/api/search` as
   the pathname and percent-encodes the route query. Both witnesses pass, and
   the canonical benchmark advances to 207 pairs, 414 cases, and 1,242 repeated
   scan positions.
-- The full managed suite exercises 2,276 tests across 221 files and 17,387
+- The pre-portability-fix managed suite exercises 2,276 tests across 221 files and 17,387
   assertions: 2,243 pass in the managed environment, 31 intentionally skip,
   and the two unchanged Git-fixture and Windows-home-ACL cases pass when
   rerun natively, for 2,245 logical passes and no product failure. Repository
   formatting, generated-model drift, TypeScript, the production build, and
   the production high-severity dependency audit pass.
-- Two post-change npm archives are byte-identical at 2,486,535 bytes with 299
+- Two post-change npm archives are byte-identical at 2,486,550 bytes with 299
   entries and SHA-256
-  `988a66416d6de0919ed07db728a3f4ed64189bef425a03527dd28cab283a74c8`.
+  `53c73e295a3983ea9469725336f0f9a4a60b58645f68489c0efd6fb5c1b6c19b`.
   Strict inspection and an isolated install validate 67 production packages,
   the public API, executable CLI, and all 79 bundled plugin files.
 - Two compiled whole-repository inventories are byte-identical at 256 rows and

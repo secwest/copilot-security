@@ -26490,7 +26490,7 @@ function nodeVueRouterClientRequestForgeryRecords(
       if (sources.length === 0) continue;
       for (const fetchCallee of fetchCallees) {
         for (const call of javascriptCallsInText(
-          file.text,
+          file.lines.join("\n"),
           structural,
           1,
           fetchCallee.expression,

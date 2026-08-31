@@ -212,6 +212,26 @@ describe("Node Vue Router client-side request-forgery model", () => {
     });
   });
 
+  test("preserves call offsets in a CRLF Vue script setup block", async () => {
+    const found = await scanVueSource(
+      [
+        "<script setup>",
+        'import { useRoute } from "vue-router";',
+        "const route = useRoute();",
+        "const target = route.query.target;",
+        'const request = fetch("/api/items/" + target);',
+        "</script>",
+        "<template><div /></template>",
+      ].join("\r\n"),
+      { sourcePath: "ProfileLoader.vue" },
+    );
+    expect(found).toHaveLength(1);
+    expect(found[0]?.frameworkModel).toMatchObject({
+      source: { line: 4 },
+      sink: { line: 5 },
+    });
+  });
+
   test("keeps path concatenation reportable but credits query boundaries", async () => {
     const path = await scanVueSource(
       [
