@@ -6,6 +6,33 @@ All notable scanner, application, benchmark, and operational changes are recorde
 
 ### Scanner effectiveness
 
+- Closed a measured one-level Flask nested-Blueprint false negative. Before the
+  host change, Flask's documented child-to-parent-to-application registration
+  shape emitted zero rows while all 20 previous Flask regressions passed with
+  144 assertions.
+- Added exact `flask-blueprint-nesting` evidence. The host accepts one ordered
+  same-file chain only when a completed child route is mounted once on a
+  distinct stable official parent Blueprint and that parent is mounted once on
+  the same stable official application. Each registration edge may have no
+  options or one literal `url_prefix`.
+- Added fail-closed controls for unmounted or non-Blueprint parents, rebound
+  child/parent/application bindings, replaced registration members, dynamic or
+  unsupported options, conditional or duplicate mounts, wrong ordering, self-
+  nesting, and recursive or second-level nesting.
+- Added a source-matched Flask 3.1.3 / Werkzeug 3.1.8 nested-Blueprint
+  exploit/control pair and strict
+  `python-flask-nested-blueprint-open-redirect-manifest.json`. No-follow
+  TestClient witnesses prove the full `/parent/child/continue` route and
+  attacker-origin selections of one and zero without external I/O. The
+  canonical corpus advances to 199 pairs, 398 cases, and 1,194 repeated scan
+  positions.
+- Focused Flask, canonical, and Rust bookkeeping acceptance passes 50 tests
+  with 2,998 assertions. Full local acceptance runs 2,175 tests across 218
+  files: 2,142 pass, 31 intentional platform/integration skips, and only the
+  two expected managed-sandbox permission failures. Both affected files pass
+  natively at 48/48 tests and 242 assertions. The aggregate executes 16,968
+  assertions. Package, GUI, and hosted evidence follows the implementation
+  checkpoint.
 - Closed a measured Flask application-factory false negative. Before the host
   change, the maintained `create_app` pattern—official Blueprint in one module,
   `from . import redirects`, exact `app.register_blueprint(redirects.bp)`, and

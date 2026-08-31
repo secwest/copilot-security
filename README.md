@@ -90,8 +90,12 @@ Flask redirects have a separate typed CWE-601 model. It requires either an
 official `flask.Flask` application route or an official `flask.Blueprint` route
 with a proved application mount, one stable `flask.request.args` query field or
 `flask.request.form` form field, and an official `flask.redirect` Location sink.
-A Blueprint may be mounted later in the same file or imported explicitly from
-one relative sibling module. Cross-file evidence resolves the exact imported
+A Blueprint may be mounted later in the same file, mounted through one exact
+same-file child-to-parent-to-application chain, or imported explicitly from one
+relative sibling module. A nested chain requires distinct stable child and
+parent Blueprints, a completed child route before the child mount, and one later
+top-level parent mount on the same stable official application. Cross-file
+evidence resolves the exact imported
 symbol or `module.blueprint` member and requires either a stable top-level
 official Flask application or an undecorated top-level `create_app`/`make_app`
 factory that constructs, mounts, and directly returns the same application.
@@ -101,15 +105,15 @@ literal `methods` list or tuple containing POST, PUT, or PATCH; default routes,
 GET, DELETE, empty lists, and dynamic method collections do not prove form
 reachability. The model supports direct, qualified, subscript, and relative-
 wrapper flows without promoting an unmounted, absolute- or wildcard-imported,
-dynamically mounted, conditionally nested, multiply mounted, rebound, or
-unresolved Blueprint declaration, a renamed or decorated factory, a missing
+dynamically mounted, recursively or multiply nested, multiply mounted, rebound,
+or unresolved Blueprint declaration, a renamed or decorated factory, a missing
 application return, local lookalikes, unsupported collections, opaque
 transformations, or ambiguous arguments. A non-root fixed local prefix is a
 control; a root-only `"/" + value` is not, because a value beginning with slash
 becomes a scheme-relative `//attacker.invalid/...` redirect. Separate pinned
-Flask/Werkzeug application-query, same-file Blueprint, cross-file application-
-factory Blueprint, and POST-form pairs use `follow_redirects=False` and inspect
-only the emitted Location. Flask documents
+Flask/Werkzeug application-query, same-file Blueprint, nested Blueprint,
+cross-file application-factory Blueprint, and POST-form pairs use
+`follow_redirects=False` and inspect only the emitted Location. Flask documents
 [`request.form` as the form-parameter collection](https://flask.palletsprojects.com/en/stable/api/#flask.Request.form)
 and `post()` as the exact [`methods=["POST"]` route shortcut](https://flask.palletsprojects.com/en/stable/api/#flask.Flask.post).
 Its [Blueprint documentation](https://flask.palletsprojects.com/en/stable/blueprints/)

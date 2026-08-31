@@ -21,7 +21,9 @@ mounts that same stable Blueprint. The cross-file model additionally resolves
 one explicit relative symbol or module import to the exact Blueprint file and
 requires either a stable top-level Flask application or an undecorated
 `create_app`/`make_app` that constructs, mounts, and directly returns the same
-application. One literal `url_prefix` is the only accepted registration option.
+application. A separate same-file nesting rule proves one ordered child route,
+child-to-distinct-parent registration, and parent-to-official-application
+registration. Each exact registration may use at most one literal `url_prefix`.
 This mirrors Flask's maintained
 [application-factory pattern](https://flask.palletsprojects.com/en/stable/patterns/appfactories/)
 and [Blueprint tutorial](https://flask.palletsprojects.com/en/stable/tutorial/views/),
@@ -36,12 +38,14 @@ The host accepts a form source only under an exact POST, PUT, or PATCH shortcut
 or static literal route-method collection. Default/GET/DELETE routes, empty or
 dynamic method collections, shadows, rebindings, absolute, wildcard, dynamic,
 or unresolved Blueprint imports, missing factory returns, renamed or decorated
-factories, unmounted, conditionally nested, dynamic-prefix, other configured,
-or multiple Blueprint registrations, ambiguous decorators or arguments,
+factories, unmounted, conditionally mounted, dynamic-prefix, other configured,
+or multiple Blueprint registrations, self/recursive/multi-level nesting,
+unstable parent members, ambiguous decorators or arguments,
 unsupported collections, and opaque transformations fail closed. Separate
 pinned no-follow application-query, same-file Blueprint-query, cross-file
-application-factory Blueprint-query, and form Flask/Werkzeug exploit/control
-pairs prove the authority switch and fixed-local control without external I/O.
+application-factory Blueprint-query, nested Blueprint-query, and form
+Flask/Werkzeug exploit/control pairs prove the authority switch and fixed-local
+control without external I/O.
 
 The parallel typed Django model requires an official `path` or `re_path`
 binding inside one balanced `urlpatterns` list, a resolvable registered

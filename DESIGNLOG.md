@@ -2,6 +2,64 @@
 
 This log records consequential implementation decisions, their evidence, and the tradeoffs that future scanner work must preserve.
 
+## 2026-08-30 — Prove one-level nested Flask Blueprint reachability
+
+**Measured gap and maintained contract.** The unchanged host emitted zero rows
+for Flask's documented nesting shape: an official child Blueprint route, exact
+`parent.register_blueprint(child)`, and later exact
+`app.register_blueprint(parent)`; all 20 preceding Flask regressions still
+passed with 144 assertions. Flask's maintained
+[Blueprint documentation](https://flask.palletsprojects.com/en/stable/blueprints/)
+states that a child registered on a parent inherits the parent's name and URL
+prefix when that parent is registered on an application. The maintained
+[`Blueprint.register_blueprint` API](https://flask.palletsprojects.com/en/stable/api/#flask.Blueprint.register_blueprint)
+records the child on the parent and permits registration options to override
+defaults. CodeQL's high-precision
+[`py/url-redirection`](https://codeql.github.com/codeql-query-help/python/py-url-redirection/)
+remains the comparative CWE-601 source/sink baseline; this increment adds the
+missing application-reachability proof.
+
+**Typed nesting decision.** Reuse the exact same-file Blueprint registration
+parser for both direct and nested mounts. A nested route is reachable only when
+one top-level official child Blueprint has completed the decorated route, a
+later exact top-level call mounts it once on a distinct top-level official
+parent Blueprint, and one still-later exact top-level call mounts that parent
+once on a stable official Flask application. Preserve the child factory and
+route, a separate `flask-blueprint-nesting` edge, the official application
+factory, and the final `flask-blueprint-registration` edge. Either registration
+may omit options or use one literal `url_prefix`; no other configuration is
+inferred.
+
+**Fail-closed boundary.** Child, parent, and application bindings and both
+`register_blueprint` members must remain stable through their respective edges.
+Reject absent or non-Blueprint parents, dynamic children or prefixes,
+unsupported keyword options, expansion, conditional calls, duplicate mounts,
+parent mounting before the child edge, self-nesting, and a second Blueprint
+between the parent and application. Cross-file nested parents, deeper nesting,
+and nested application-factory registration remain explicit future extensions.
+They require equally exact import, suite, return, and ordering evidence rather
+than a recursive name match.
+
+**Executable corpus and initial acceptance.** The Flask 3.1.3 / Werkzeug 3.1.8
+twins keep identical child and parent constructor prefixes, child route,
+registration chain, application, and request. The exploit's root-only prefix
+produces a scheme-relative Location; the control percent-encodes the same value
+beneath `/continue?next=`. TestClient requests the complete
+`/parent/child/continue` route without following the redirect and performs no
+external I/O. The strict dedicated manifest requires the source, sink, child
+route, child-to-parent and parent-to-application boundaries, Location, origin
+switch, fixed-local control, and CWE-601 in validation and attack-path fields.
+The canonical corpus advances to 199 pairs, 398 cases, and 1,194 repeated
+positions. Focused Flask, canonical, and Rust bookkeeping acceptance passes 50
+tests with 2,998 assertions; both witnesses record attacker-origin selections
+one and zero. Full local acceptance runs 2,175 tests across 218 files with
+2,142 passes, 31 intentional platform/integration skips, and only the two
+expected managed-sandbox permission failures. Both affected files pass natively
+at 48/48 tests and 242 assertions. The aggregate executes 16,968 assertions.
+Types, generated-model drift, build, formatting, the live production dependency
+audit, and both exact-version witnesses pass. Package, GUI, hosted, and
+immutable-checkpoint evidence follows.
+
 ## 2026-08-30 — Resolve Flask Blueprint mounts across application factories
 
 **Measured gap and maintained contract.** The unchanged host emitted zero rows

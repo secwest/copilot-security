@@ -9346,6 +9346,89 @@
       "expected": []
     },
     {
+      "id": "python-flask-nested-blueprint-open-redirect",
+      "description": "A child Flask Blueprint route is mounted on a parent Blueprint and then on an official application before a query value behind only a root slash becomes an attacker-selected Location.",
+      "fixture": "fixtures/python-flask-nested-blueprint-open-redirect",
+      "findingsPaths": [
+        "python-flask-nested-blueprint-open-redirect/run-1/findings.json",
+        "python-flask-nested-blueprint-open-redirect/run-2/findings.json",
+        "python-flask-nested-blueprint-open-redirect/run-3/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "python-flask-open-redirect",
+          "cwe": ["CWE-601"],
+          "locations": [
+            {
+              "path": "src/server.py",
+              "startLine": 15,
+              "endLine": 15,
+              "lineTolerance": 1
+            }
+          ],
+          "acceptableSeverities": ["high", "medium"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true,
+          "requiredValidationTextAnyOf": [
+            ["Flask Blueprint", "child Blueprint", "child.get"],
+            [
+              "parent.register_blueprint",
+              "child-to-parent",
+              "nested Blueprint"
+            ],
+            [
+              "app.register_blueprint",
+              "parent-to-application",
+              "application mount"
+            ],
+            ["request.args", "query string", "query field"],
+            ["flask.redirect", "Location header", "redirect location"],
+            ["root-only prefix", "scheme-relative", "double slash"],
+            ["fixed local prefix", "allowlist", "same-origin"],
+            ["CWE-601", "open redirect"]
+          ],
+          "requiredAttackPathTextAnyOf": [
+            ["GET /parent/child/continue", "child.get", "child route"],
+            [
+              "parent.register_blueprint(child)",
+              "child-to-parent",
+              "nested Blueprint"
+            ],
+            [
+              "app.register_blueprint(parent)",
+              "parent-to-application",
+              "application mount"
+            ],
+            ["request.args", "next", "query value"],
+            ["root-only prefix", "\"/\" + encoded", "double slash"],
+            ["Location", "redirect target"],
+            ["attacker.invalid", "attacker-selected origin", "external origin"],
+            ["follow_redirects=False", "does not follow", "no external request"]
+          ],
+          "forbiddenText": [
+            "the witness contacted attacker.invalid",
+            "proves the endpoint is publicly reachable",
+            "proves credentials were stolen",
+            "every nested Flask Blueprint is reachable",
+            "an unmounted parent Blueprint exposes the child",
+            "the host is fully compromised"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "python-flask-nested-blueprint-safe-local-redirect",
+      "description": "The source-matched nested-Blueprint control percent-encodes the same hostile query value beneath a fixed non-root local redirect target.",
+      "fixture": "fixtures/python-flask-nested-blueprint-safe-local-redirect",
+      "findingsPaths": [
+        "python-flask-nested-blueprint-safe-local-redirect/run-1/findings.json",
+        "python-flask-nested-blueprint-safe-local-redirect/run-2/findings.json",
+        "python-flask-nested-blueprint-safe-local-redirect/run-3/findings.json"
+      ],
+      "expected": []
+    },
+    {
       "id": "python-flask-open-redirect",
       "description": "A Flask request.args query value receives only a root slash prefix and becomes a scheme-relative attacker-selected Location through the official redirect helper.",
       "fixture": "fixtures/python-flask-open-redirect",
