@@ -6,6 +6,53 @@ All notable scanner, application, benchmark, and operational changes are recorde
 
 ### Scanner effectiveness
 
+- Closed a measured Flask open-redirect false negative. The unchanged model
+  discarded a request query value wrapped by the live Python built-in
+  `str(object)` before `flask.redirect`; 39 preceding Flask tests passed and
+  only the new case failed, with 283 assertions.
+- Added one bounded string-conversion taint edge for a single positional
+  argument through the live bare built-in, unchanged `builtins.str`, an aliased
+  official module, or a direct/aliased official import. The conversion is an
+  explicit provenance step and composes with the existing same-value immutable
+  allowlist proof. String conversion is never treated as URL validation.
+- Hardened Python built-in liveness for lexical scope. Parameters, local
+  definitions, imports, or assignments anywhere in the handler—including
+  after the call—prevent built-in attribution; custom imports, rebound official
+  aliases, and qualified lookalikes also remain unproved. Existing datamodel
+  `compile`/`exec` behavior remains green.
+- Added five live-binding forms, eight fixed custom-shadow/rebinding controls,
+  and a Flask 3.1.3/Werkzeug 3.1.8 executable pair. The exploit emits the
+  hostile absolute URL after `str`; the topology-matched control performs the
+  same conversion but redirects only immutable tuple members and otherwise
+  selects `/account`. Both no-follow witnesses perform no external I/O. The
+  canonical corpus advances to 203 pairs, 406 cases, and 1,218 repeated scan
+  positions.
+- Focused Flask, canonical, and Rust bookkeeping acceptance passes 68 tests
+  with 3,185 assertions; the adjacent datamodel built-in lane passes 9 tests
+  with 46 assertions. Full local acceptance runs 2,193 tests across 218 files:
+  2,160 pass, 31 are intentional platform/integration skips, and only the two
+  established managed-sandbox permission checks fail. Their native rerun
+  passes 48/48 tests and 242 assertions; the aggregate executes 17,155
+  assertions. Generated-model drift, TypeScript, build, formatting, both
+  exact-version witnesses, and the live production dependency audit are clean.
+- Two independently built 299-entry npm packages are byte-identical at
+  2,499,173 bytes with SHA-256
+  `b933f2631e084417e6f2b5c22ce70e14bc041274cc2d2f716c045d7a3509e50a`;
+  a fresh 67-package installation validates the public API, CLI, and all 79
+  bundled plugin files. A bounded whole-repository self-scan emits 256 review
+  rows from fixtures, tests, and documentation, zero production-source rows,
+  and no spurious Flask open-redirect row.
+- Windows builds with zero warnings/errors, passes 7/7 core and 3/3 shared
+  tests, and passes a verified hidden startup. Its 346,796-byte executable has
+  SHA-256
+  `d95025f9cf3cd913df7957dd17adb4511d186ec76f61d802ced345f08312f38f`.
+  Ubuntu/WSL locked restore and build also have zero warnings/errors; 7/7 core,
+  3/3 shared, and 2/2 Linux UI tests pass, followed by non-graphical and real
+  X11/Xvfb startup. The 72,568-byte Linux executable has SHA-256
+  `7e29d642169a6c218c249216c6c10648307aea88faf636b69ac25741104b4adf`.
+  All disposable package and platform-publish trees were removed after
+  inspection. Hosted and immutable-checkpoint evidence follows after the
+  implementation checkpoint.
 - Closed a measured Flask open-redirect false positive. The previous model
   reported a request-derived redirect guarded by exact positive membership in
   an immutable server-owned tuple; the baseline was 35 prior tests passing,

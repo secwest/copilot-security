@@ -2,6 +2,82 @@
 
 This log records consequential implementation decisions, their evidence, and the tradeoffs that future scanner work must preserve.
 
+## 2026-08-31 — Preserve Flask redirect taint through live Python string conversion
+
+**Measured gap.** A source-matched Flask GET route passed
+`request.args.get("next", "")` through the exact Python built-in `str(object)`
+before an official `flask.redirect`. The unchanged host emitted no row: all 39
+preceding Flask tests passed and only the new case failed, with 283 assertions.
+Python documents [`str(object)` as returning the string form of its
+object](https://docs.python.org/3/library/functions.html#func-str), while Flask
+documents the redirect `location` as the URL placed in the redirect response.
+CodeQL's maintained [data-flow guidance](https://codeql.github.com/docs/writing-codeql-queries/about-data-flow-analysis/#normal-data-flow-vs-taint-tracking)
+explicitly distinguishes exact value flow from transformations that still
+preserve security-relevant influence. Discarding the call as opaque therefore
+created a concrete taint-propagation false negative.
+
+**Bounded decision.** Unwrap exactly one string conversion with exactly one
+positional argument. Attribute it only to the live bare Python built-in or an
+unchanged official `builtins.str` binding reached through an exact direct,
+module, module-alias, or imported-symbol alias. Resolve the inner expression
+through the existing bounded Python assignment flow, record a
+`python-builtin-string-conversion` propagator, and retain the same request
+source, route, redirect, and Location proof. Normalize the checked value by the
+same conversion rule before comparing an immutable allowlist guard, so the
+topology-matched control is not turned into a false positive.
+
+**Lexical and identity boundary.** Python decides local names for an entire
+function scope. Built-in liveness now rejects parameters, definitions, imports,
+or assignments anywhere in that scope, including bindings textually after the
+call that would otherwise produce an unbound-local failure. Top-level shadows,
+custom imports, rebound direct or module aliases, and qualified lookalikes are
+also rejected. Keyword, expanded, multi-argument, nested, or otherwise opaque
+conversion shapes remain outside this edge. This scope hardening is shared by
+the existing `compile` and `exec` checks; their nine-test datamodel regression
+lane remains green.
+
+**Executable and regression evidence.** Five live official forms cover the
+bare built-in, official module, module alias, direct import, and imported-symbol
+alias. Eight controls cover fixed top-level and local definitions/assignments,
+a handler parameter, an assignment after the call, a fixed custom import, and
+rebound official symbol and module aliases. The source-matched Flask
+3.1.3/Werkzeug 3.1.8
+exploit emits the selected `attacker.invalid` URL after conversion. Its control
+performs the same conversion, admits only exact members of the immutable tuple,
+and emits `/account`. Both TestClient witnesses disable redirect following and
+make no external request. The strict manifest requires live binding, conversion,
+request source, Location boundary, missing destination restriction, and
+CWE-601 evidence while forbidding any claim that `str` sanitizes URLs.
+
+**Local acceptance.** Focused Flask, canonical-manifest, and Rust bookkeeping
+acceptance passes 68 tests and 3,185 assertions; the adjacent datamodel lane
+passes 9 tests and 46 assertions. The canonical corpus advances to 203
+exploit/control pairs, 406 cases, and 1,218 repeated scan positions. The full
+suite runs 2,193 tests across 218 files: 2,160 pass, 31 are intentional platform
+or integration skips, and only the two established managed-sandbox permission
+checks fail. Their native rerun passes 48/48 tests and 242 assertions; the
+aggregate executes 17,155 assertions. Generated-model drift, TypeScript,
+build, formatting, both exact-version witnesses, and the production dependency
+audit are clean. A bounded whole-repository self-scan emits 256 review rows
+from fixtures, tests, and documentation, zero production-source rows, and no
+spurious Flask open-redirect row.
+
+**Distribution and GUI evidence.** Two independent 299-entry packages are
+byte-identical at 2,499,173 bytes with SHA-256
+`b933f2631e084417e6f2b5c22ce70e14bc041274cc2d2f716c045d7a3509e50a`.
+A disposable 67-package installation validates the public API, CLI, and all 79
+bundled plugin files. Windows builds with zero warnings or errors, passes 7/7
+core and 3/3 shared tests, and reaches a hidden idle UI loop under harness
+control. Its 346,796-byte executable has SHA-256
+`d95025f9cf3cd913df7957dd17adb4511d186ec76f61d802ced345f08312f38f`.
+Ubuntu/WSL locked restore and build have zero warnings or errors; 7/7 core, 3/3
+shared, and 2/2 Linux UI tests pass, followed by non-graphical and X11/Xvfb UI
+startup. Its 72,568-byte self-contained executable has SHA-256
+`7e29d642169a6c218c249216c6c10648307aea88faf636b69ac25741104b4adf`.
+All disposable package and publish trees are removed after inspection. Hosted
+workflow and immutable-checkpoint evidence will be appended after the
+implementation commit.
+
 ## 2026-08-31 — Prove immutable Flask redirect allowlists without hiding inverted policy
 
 **Measured gap.** A topology-matched Flask route assigned one query field to

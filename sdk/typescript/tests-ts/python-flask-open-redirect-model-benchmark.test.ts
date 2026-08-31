@@ -115,6 +115,50 @@ describe("Flask open-redirect model", () => {
     expect(manifest.cases[1].expected).toEqual([]);
   });
 
+  test("keeps a strict built-in str conversion contract", async () => {
+    const manifest = JSON.parse(
+      await readFile(
+        join(
+          benchmarkRoot,
+          "python-flask-builtin-str-open-redirect-manifest.json",
+        ),
+        "utf8",
+      ),
+    );
+    expect(manifest.schemaVersion).toBe("1.0");
+    expect(
+      Object.values(manifest.thresholds).every(
+        (value) => value === 0 || value === 1,
+      ),
+    ).toBeTrue();
+    expect(manifest.cases.map(({ id }: { id: string }) => id)).toEqual([
+      "python-flask-builtin-str-open-redirect",
+      "python-flask-builtin-str-allowlist-safe-redirect",
+    ]);
+    expect(manifest.cases[0].expected[0]).toMatchObject({
+      id: modelId,
+      cwe: ["CWE-601"],
+      requireValidation: true,
+      requireAttackPath: true,
+      requireCodeEvidence: true,
+    });
+    expect(manifest.cases[0].expected[0].requiredValidationTextAnyOf).toEqual(
+      expect.arrayContaining([
+        expect.arrayContaining(["built-in str"]),
+        expect.arrayContaining(["live binding"]),
+        expect.arrayContaining(["immutable allowlist"]),
+      ]),
+    );
+    expect(manifest.cases[0].expected[0].forbiddenText).toEqual(
+      expect.arrayContaining([
+        "str sanitizes URLs",
+        "a shadowed str is the Python built-in",
+        "a rebound builtins alias is trusted",
+      ]),
+    );
+    expect(manifest.cases[1].expected).toEqual([]);
+  });
+
   test("keeps a strict POST form exploit/control benchmark contract", async () => {
     const manifest = JSON.parse(
       await readFile(
@@ -421,6 +465,34 @@ describe("Flask open-redirect model", () => {
         cweIds: ["CWE-601"],
       },
     });
+    expect(controlModels).toHaveLength(0);
+  });
+
+  test("separates the checked-in built-in str exploit and allowlist control", async () => {
+    const exploit = join(
+      benchmarkRoot,
+      "fixtures",
+      "python-flask-builtin-str-open-redirect",
+    );
+    const control = join(
+      benchmarkRoot,
+      "fixtures",
+      "python-flask-builtin-str-allowlist-safe-redirect",
+    );
+    const exploitModels = models(await buildResidualRiskInventory(exploit));
+    const controlModels = models(await buildResidualRiskInventory(control));
+
+    expect(exploitModels).toHaveLength(1);
+    expect(exploitModels[0]).toMatchObject({
+      source: { kind: "flask-request-query-string" },
+      sink: { kind: "flask-redirect-location", cweIds: ["CWE-601"] },
+    });
+    expect(exploitModels[0].propagators).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ kind: "python-builtin-string-conversion" }),
+        expect.objectContaining({ kind: "http-location-header-assignment" }),
+      ]),
+    );
     expect(controlModels).toHaveLength(0);
   });
 
@@ -1886,6 +1958,213 @@ describe("Flask open-redirect model", () => {
     }
   });
 
+  test("tracks request strings through the live built-in str conversion", async () => {
+    const exploit = await mkdtemp(join(tmpdir(), "flask-builtin-str-exploit-"));
+    const control = await mkdtemp(join(tmpdir(), "flask-builtin-str-control-"));
+    try {
+      const source = (location: string) =>
+        [
+          "from flask import Flask, redirect, request",
+          "app = Flask(__name__)",
+          '@app.get("/continue")',
+          "def continue_to():",
+          `    return redirect(${location}, code=307)`,
+          "",
+        ].join("\n");
+      await writeRepository(exploit, {
+        "server.py": source('str(request.args.get("next", ""))'),
+      });
+      await writeRepository(control, {
+        "server.py": source('str("/account")'),
+      });
+
+      const exploitModels = models(await buildResidualRiskInventory(exploit));
+      const controlModels = models(await buildResidualRiskInventory(control));
+      expect(exploitModels).toHaveLength(1);
+      expect(exploitModels[0].source.kind).toBe("flask-request-query-string");
+      expect(exploitModels[0].sink.kind).toBe("flask-redirect-location");
+      expect(exploitModels[0].propagators).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ kind: "python-builtin-string-conversion" }),
+        ]),
+      );
+      expect(controlModels).toHaveLength(0);
+    } finally {
+      await rm(exploit, { recursive: true, force: true });
+      await rm(control, { recursive: true, force: true });
+    }
+  });
+
+  test("requires a live built-in str binding", async () => {
+    const request = 'request.args.get("next", "")';
+    const source = (
+      imports: readonly string[],
+      beforeApplication: readonly string[],
+      beforeSink: readonly string[],
+      location: string,
+      afterSink: readonly string[] = [],
+    ) =>
+      [
+        "from flask import Flask, redirect, request",
+        ...imports,
+        ...beforeApplication,
+        "app = Flask(__name__)",
+        '@app.get("/continue")',
+        "def continue_to():",
+        ...beforeSink.map((line) => `    ${line}`),
+        `    return redirect(${location}, code=307)`,
+        ...afterSink.map((line) => `    ${line}`),
+        "",
+      ].join("\n");
+    const live: ReadonlyArray<readonly [string, string]> = [
+      ["bare", source([], [], [], `str(${request})`)],
+      [
+        "module",
+        source(["import builtins"], [], [], `builtins.str(${request})`),
+      ],
+      [
+        "module-alias",
+        source(["import builtins as native"], [], [], `native.str(${request})`),
+      ],
+      [
+        "from-direct",
+        source(["from builtins import str"], [], [], `str(${request})`),
+      ],
+      [
+        "from-alias",
+        source(
+          ["from builtins import str as text"],
+          [],
+          [],
+          `text(${request})`,
+        ),
+      ],
+    ];
+    for (const [name, server] of live) {
+      const root = await mkdtemp(join(tmpdir(), `flask-live-str-${name}-`));
+      try {
+        await writeRepository(root, { "server.py": server });
+        const detected = models(await buildResidualRiskInventory(root));
+        expect(detected, name).toHaveLength(1);
+        expect(detected[0].propagators, name).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({
+              kind: "python-builtin-string-conversion",
+            }),
+          ]),
+        );
+      } finally {
+        await rm(root, { recursive: true, force: true });
+      }
+    }
+
+    const fixedSanitizer = [
+      "def str(value):",
+      '    return "/account"',
+      "",
+    ].join("\n");
+    const rejected: ReadonlyArray<
+      readonly [string, Readonly<Record<string, string>>]
+    > = [
+      [
+        "top-level-function",
+        {
+          "server.py": source(
+            [],
+            ["def str(value):", '    return "/account"'],
+            [],
+            `str(${request})`,
+          ),
+        },
+      ],
+      [
+        "top-level-assignment",
+        {
+          "server.py": source(
+            [],
+            ['str = lambda value: "/account"'],
+            [],
+            `str(${request})`,
+          ),
+        },
+      ],
+      [
+        "function-local-assignment-before",
+        {
+          "server.py": source(
+            [],
+            [],
+            ['str = lambda value: "/account"'],
+            `str(${request})`,
+          ),
+        },
+      ],
+      [
+        "handler-parameter",
+        {
+          "server.py": source([], [], [], `str(${request})`).replace(
+            "def continue_to():",
+            "def continue_to(str):",
+          ),
+        },
+      ],
+      [
+        "function-local-assignment-after",
+        {
+          "server.py": source([], [], [], `str(${request})`, [
+            'str = lambda value: "/account"',
+          ]),
+        },
+      ],
+      [
+        "custom-import",
+        {
+          "sanitizer.py": fixedSanitizer,
+          "server.py": source(
+            ["from sanitizer import str"],
+            [],
+            [],
+            `str(${request})`,
+          ),
+        },
+      ],
+      [
+        "rebound-official-alias",
+        {
+          "server.py": source(
+            ["from builtins import str as text"],
+            ['text = lambda value: "/account"'],
+            [],
+            `text(${request})`,
+          ),
+        },
+      ],
+      [
+        "rebound-official-module",
+        {
+          "server.py": source(
+            ["import builtins as native"],
+            ["native = None"],
+            [],
+            `native.str(${request})`,
+          ),
+        },
+      ],
+    ];
+    for (const [name, files] of rejected) {
+      const root = await mkdtemp(join(tmpdir(), `flask-shadowed-str-${name}-`));
+      try {
+        await writeRepository(root, files);
+        expect(
+          models(await buildResidualRiskInventory(root)),
+          name,
+        ).toHaveLength(0);
+      } finally {
+        await rm(root, { recursive: true, force: true });
+      }
+    }
+  });
+
   test("distinguishes an inverted redirect allowlist from an immutable allowlist", async () => {
     const source = (operator: "in" | "not in") =>
       [
@@ -2494,6 +2773,9 @@ describe("Flask open-redirect model", () => {
     expect(prompt).toContain("immutable top-level tuple");
     expect(prompt).toContain("not in");
     expect(prompt).toContain("mutable, dynamic, rebound");
+    expect(prompt).toContain("single-positional-argument str(object)");
+    expect(prompt).toContain("live Python built-in");
+    expect(prompt).toContain("string conversion itself as sanitization");
     expect(prompt).toContain("follow_redirects=False");
     expect(prompt).toContain("CWE-601");
   });

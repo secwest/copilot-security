@@ -117,9 +117,17 @@ control when one stable uppercase binding is assigned exactly once to an
 immutable top-level tuple of literal destinations and the guard directly
 dominates the sink. Inverted `not in` membership and mutable, dynamic, rebound,
 function-scoped, compound, non-dominating, or nested shapes remain reportable.
+The source model also preserves one exact single-argument Python `str(object)`
+conversion when the callable is the live built-in or an unchanged official
+`builtins.str` binding through direct, module, or aliased import syntax.
+Python's string conversion changes representation but does not validate a URL;
+shadowed, parameter-bound, locally defined, reassigned, keyword, expanded,
+multi-argument, nested, and qualified-lookalike callables remain unproved.
+Positive immutable-allowlist control continues to apply to the converted value.
 Separate pinned
 Flask/Werkzeug application-query, same-file Blueprint, nested Blueprint, nested
-application-factory Blueprint, cross-file application-factory Blueprint, and POST-form pairs use
+application-factory Blueprint, cross-file application-factory Blueprint,
+built-in-string, and POST-form pairs use
 `follow_redirects=False` and inspect only the emitted Location. Flask documents
 [`request.form` as the form-parameter collection](https://flask.palletsprojects.com/en/stable/api/#flask.Request.form)
 and `post()` as the exact [`methods=["POST"]` route shortcut](https://flask.palletsprojects.com/en/stable/api/#flask.Flask.post).
@@ -132,7 +140,11 @@ show the cross-module import, registration, and return sequence.
 CodeQL's maintained
 [Python open-redirect guidance](https://codeql.github.com/codeql-query-help/python/py-url-redirection/)
 also identifies restriction to a server-owned set of known destinations as a
-valid control.
+valid control. Python documents [`str(object)` as returning the string form of
+its object](https://docs.python.org/3/library/functions.html#func-str), and
+CodeQL's maintained [data-flow guidance](https://codeql.github.com/docs/writing-codeql-queries/about-data-flow-analysis/#normal-data-flow-vs-taint-tracking)
+distinguishes exact value flow from transformations that still preserve
+security-relevant influence.
 Registered Django function and class-based views now have the same typed
 treatment without collapsing the frameworks into a name-matched rule. The
 Django model requires an official `path` or `re_path` call inside the sole

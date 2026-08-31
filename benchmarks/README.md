@@ -3085,8 +3085,9 @@ The dedicated `python-flask-open-redirect-manifest.json`,
 `python-flask-nested-blueprint-open-redirect-manifest.json` and
 `python-flask-nested-blueprint-factory-open-redirect-manifest.json` and
 `python-flask-cross-file-nested-blueprint-factory-open-redirect-manifest.json`,
-plus `python-flask-static-allowlist-open-redirect-manifest.json`, add
-independent Flask root-prefix pairs. The first reads one literal `request.args` field from an
+plus `python-flask-static-allowlist-open-redirect-manifest.json` and
+`python-flask-builtin-str-open-redirect-manifest.json`, add independent
+Flask redirect pairs. The first reads one literal `request.args` field from an
 application GET shortcut. The second reads the same collection from an exact
 official Blueprint GET route and requires a later top-level
 `app.register_blueprint(bp)` mount. The third follows Flask's maintained
@@ -3108,13 +3109,19 @@ The eighth isolates allowlist polarity. Its exploit uses `not in` and therefore
 redirects the hostile absolute URL, while its control uses positive membership
 in a stable immutable top-level tuple and reaches the fixed `/account`
 fallback.
+The ninth preserves the same request value through the live Python built-in
+`str(object)` conversion. Its exploit emits that converted value directly as
+Location; its topology-matched control converts the same value but redirects it
+only on exact membership in the immutable tuple and otherwise selects
+`/account`.
 The first seven exploits prepend only `/`
 and pass the result to the official `flask.redirect`; the leading slash in
 the supplied value produces a scheme-relative `//attacker.invalid/...`
 Location. Each topology-matched control percent-encodes the same value below
 the non-root fixed `/continue?next=` target. The eighth sends the selected
 absolute URL directly on inverted membership and falls back to `/account` on
-positive membership. All fixtures pin Flask 3.1.3 and
+positive membership. The ninth does the same with a built-in conversion before
+the policy boundary. All fixtures pin Flask 3.1.3 and
 Werkzeug 3.1.8, disable redirect following, and make no external request.
 
 The model accepts form data only for exact POST, PUT, or PATCH shortcuts or a
@@ -3141,6 +3148,15 @@ top-level tuple containing at least two literal strings. Negative membership,
 lists and sets, single/dynamic/multiline tuples, lowercase, duplicate,
 function-scoped or rebound bindings, compound or non-dominating predicates,
 different checked values, and nested sinks remain findings.
+
+Built-in string propagation is also intentionally identity-bound. The model
+accepts one positional argument through the live bare `str`, an unchanged
+official `builtins.str` module binding, or an unchanged direct or aliased
+`from builtins import str` binding. It records the conversion as an explicit
+propagator and reuses that same-value proof for the immutable allowlist. Local
+definitions, parameters, assignments anywhere in the handler's lexical scope,
+custom imports, rebound official aliases, keywords, expansion, extra
+arguments, nesting, and qualified lookalikes are not promoted to the built-in.
 
 ```powershell
 node ../../benchmarks/run-benchmark.mjs `

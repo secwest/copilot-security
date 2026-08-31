@@ -39472,21 +39472,32 @@ function pythonDatamodelBindingReachableAtLine(
 
 function pythonBuiltinCallableIsLive(
   lines: readonly string[],
-  name: "compile" | "exec",
+  name: "compile" | "exec" | "str",
   callLine: number,
   wrapper: ExportedPythonFunction | undefined,
 ): boolean {
-  if (
-    wrapper?.parameters.includes(name) === true ||
-    pythonIdentifierReassignedBetween(lines, name, 0, callLine)
-  ) {
-    return false;
-  }
+  const structuralLines = pythonStructuralLines(lines);
   const shadow = new RegExp(
     `^\\s*(?:def\\s+${name}\\s*\\(|(?:from\\s+[^\\s]+\\s+import\\s+[^#]*\\b${name}\\b)|(?:import\\s+[^#]*\\s+as\\s+${name}\\b))`,
     "u",
   );
-  return !pythonStructuralLines(lines)
+  if (
+    wrapper?.parameters.includes(name) === true ||
+    pythonIdentifierReassignedBetween(lines, name, 0, callLine) ||
+    (wrapper !== undefined &&
+      (pythonIdentifierReassignedBetween(
+        lines,
+        name,
+        wrapper.startLine,
+        wrapper.endLine + 1,
+      ) ||
+        structuralLines
+          .slice(wrapper.startLine, wrapper.endLine)
+          .some((candidate) => shadow.test(candidate))))
+  ) {
+    return false;
+  }
+  return !structuralLines
     .slice(0, Math.max(0, callLine - 1))
     .some((candidate) => shadow.test(candidate));
 }
@@ -43248,6 +43259,48 @@ function pythonFlaskRedirectSink(
   return undefined;
 }
 
+function pythonLiveBuiltinStringConversion(
+  lines: readonly string[],
+  wrapper: ExportedPythonFunction,
+  line: number,
+  expression: string,
+): { expression: string; symbol: string } | undefined {
+  const callee = /^([A-Za-z_]\w*(?:\s*\.\s*[A-Za-z_]\w*)?)\s*\(/u
+    .exec(pythonStructuralCode(expression))?.[1]
+    ?.replace(/\s+/gu, "");
+  if (callee === undefined) return undefined;
+  const arguments_ = pythonCallArgumentsForExpression(
+    expression,
+    new RegExp(
+      `^${escapeRegularExpression(callee).replaceAll("\\.", "\\s*\\.\\s*")}\\s*\\(`,
+      "u",
+    ),
+  );
+  if (
+    arguments_?.length !== 1 ||
+    arguments_[0]!.trim().startsWith("*") ||
+    /^[A-Za-z_]\w*\s*=/u.test(arguments_[0]!.trim())
+  ) {
+    return undefined;
+  }
+  const bindingIsLive =
+    (callee === "str" &&
+      pythonBuiltinCallableIsLive(lines, "str", line, wrapper)) ||
+    pythonOfficialImportedMemberBinding(
+      lines,
+      "builtins",
+      "str",
+      callee,
+      line,
+    ) !== undefined;
+  if (!bindingIsLive) return undefined;
+  const argument = arguments_[0]!.trim();
+  return {
+    expression: resolvePythonExpression(lines, argument, line) ?? argument,
+    symbol: `${callee}(value)`,
+  };
+}
+
 function pythonFlaskImmutableRedirectAllowlistGuard(
   lines: readonly string[],
   wrapper: ExportedPythonFunction,
@@ -43294,8 +43347,17 @@ function pythonFlaskImmutableRedirectAllowlistGuard(
       continue;
     }
 
-    const checked =
+    let checked =
       resolvePythonExpression(lines, guard[2], index + 1) ?? guard[2];
+    const stringConversion = pythonLiveBuiltinStringConversion(
+      lines,
+      wrapper,
+      index + 1,
+      checked,
+    );
+    if (stringConversion !== undefined) {
+      checked = stringConversion.expression;
+    }
     if (
       checked.replace(/\s+/gu, "") !== sourceExpression.replace(/\s+/gu, "")
     ) {
@@ -43347,8 +43409,17 @@ function pythonFlaskOpenRedirectSource(
   if (wrapper === undefined) return undefined;
   const routeEvidence = pythonFlaskRouteEvidence(files, path, lines, wrapper);
   if (routeEvidence === undefined) return undefined;
-  const resolved =
+  let resolved =
     resolvePythonExpression(lines, expression, callLine) ?? expression;
+  const builtinStringConversion = pythonLiveBuiltinStringConversion(
+    lines,
+    wrapper,
+    callLine,
+    resolved,
+  );
+  if (builtinStringConversion !== undefined) {
+    resolved = builtinStringConversion.expression;
+  }
   if (pythonFixedLocalRedirectPrefix(resolved) !== undefined) return undefined;
   const directRequestSource = pythonFlaskRequestDataEvidence(
     files,
@@ -43392,6 +43463,14 @@ function pythonFlaskOpenRedirectSource(
     )
   ) {
     return undefined;
+  }
+  if (builtinStringConversion !== undefined) {
+    sources[0]!.propagators.push({
+      kind: "python-builtin-string-conversion",
+      path,
+      line: callLine,
+      symbol: builtinStringConversion.symbol,
+    });
   }
   if (sources[0]!.kind === "flask-request-form-string") {
     if (!routeEvidence.allowsForm || routeEvidence.formMethod === undefined) {
