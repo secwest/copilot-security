@@ -3079,26 +3079,36 @@ node ../../benchmarks/run-benchmark.mjs `
 ```
 
 The dedicated `python-flask-open-redirect-manifest.json`,
-`python-flask-blueprint-open-redirect-manifest.json`, and
-`python-flask-post-open-redirect-manifest.json` add independent Flask
-root-prefix pairs. The first reads one literal `request.args` field from an
+`python-flask-blueprint-open-redirect-manifest.json`,
+`python-flask-cross-file-blueprint-open-redirect-manifest.json`, and
+`python-flask-post-open-redirect-manifest.json` add independent Flask root-
+prefix pairs. The first reads one literal `request.args` field from an
 application GET shortcut. The second reads the same collection from an exact
-official Blueprint GET route and requires a later exact top-level
-`app.register_blueprint(bp)` mount. The third reads one literal `request.form`
-field from an exact
-`app.route(..., methods=["POST"])` registration. Each exploit prepends only
-`/` and passes the result to the official `flask.redirect`; the leading slash
-in the supplied value produces a scheme-relative `//attacker.invalid/...`
+official Blueprint GET route and requires a later top-level
+`app.register_blueprint(bp)` mount. The third follows Flask's maintained
+application-factory pattern: `create_app` constructs an official application,
+imports the exact sibling Blueprint module with an explicit relative import,
+mounts `module.bp` under one literal `url_prefix`, and directly returns the same
+application. The fourth reads one literal `request.form` field from an exact
+`app.route(..., methods=["POST"])` registration. Each exploit prepends only `/`
+and passes the result to the official `flask.redirect`; the leading slash in
+the supplied value produces a scheme-relative `//attacker.invalid/...`
 Location. Each topology-matched control percent-encodes the same value below
 the non-root fixed `/continue?next=` target. All fixtures pin Flask 3.1.3 and
-Werkzeug 3.1.8, disable redirect following, and make no external request. The
-model accepts form data only for exact POST, PUT, or PATCH shortcuts or a
-static literal route-method collection containing one of those methods. It
-rejects local Flask shadows, rebound bindings, unmounted, scoped, nested-only,
-dynamic, or multiple Blueprint registrations, dynamic or multiple decorators,
-GET/default/DELETE form mismatches, dynamic
-method collections, ambiguous redirect roles, unsupported request collections,
-and opaque calls:
+Werkzeug 3.1.8, disable redirect following, and make no external request.
+
+The model accepts form data only for exact POST, PUT, or PATCH shortcuts or a
+static literal route-method collection containing one of those methods. A
+cross-file Blueprint mount accepts only an exact relative symbol import or
+relative module import, a stable top-level application or undecorated named
+factory with a direct application return, and no registration option other than
+one literal `url_prefix`. It rejects local Flask shadows, absolute, wildcard,
+dynamic, unresolved, or rebound imports, missing or different factory returns,
+renamed or decorated factories, unmounted, conditionally nested, dynamic-
+prefix, other configured, or multiple Blueprint registrations, dynamic or
+multiple decorators, GET/default/DELETE form mismatches, dynamic method
+collections, ambiguous redirect roles, unsupported request collections, and
+opaque calls:
 
 ```powershell
 node ../../benchmarks/run-benchmark.mjs `
@@ -3112,11 +3122,15 @@ node ../../benchmarks/run-benchmark.mjs `
   --mode deep
 ```
 
-Run the Blueprint- or form-specific gate by substituting
-`python-flask-blueprint-open-redirect-manifest.json` or
+Run a Blueprint- or form-specific gate by substituting
+`python-flask-blueprint-open-redirect-manifest.json`,
+`python-flask-cross-file-blueprint-open-redirect-manifest.json`, or
 `python-flask-post-open-redirect-manifest.json` and a separate results directory
 in the same command. Flask's maintained documentation explains that a
-[Blueprint records routes that become live when registered on an application](https://flask.palletsprojects.com/en/stable/blueprints/).
+[Blueprint records routes that become live when registered on an application](https://flask.palletsprojects.com/en/stable/blueprints/),
+and its [application-factory pattern](https://flask.palletsprojects.com/en/stable/patterns/appfactories/)
+and [Blueprint tutorial](https://flask.palletsprojects.com/en/stable/tutorial/views/)
+show the exact cross-module import, registration, and return sequence.
 
 The dedicated `python-django-open-redirect-manifest.json`,
 `python-django-class-view-open-redirect-manifest.json`, and

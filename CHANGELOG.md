@@ -6,6 +6,37 @@ All notable scanner, application, benchmark, and operational changes are recorde
 
 ### Scanner effectiveness
 
+- Closed a measured Flask application-factory false negative. Before the host
+  change, the maintained `create_app` pattern—official Blueprint in one module,
+  `from . import redirects`, exact `app.register_blueprint(redirects.bp)`, and
+  direct `return app` in the package factory—emitted zero rows while all 15
+  previous Flask regressions passed with 103 assertions.
+- Added typed `relative-python-blueprint-symbol-import` and
+  `relative-python-blueprint-module-import` evidence. Cross-file reachability
+  resolves one explicit relative import to the exact Blueprint source and
+  exported binding, then requires either a stable top-level official Flask
+  application or an undecorated top-level `create_app`/`make_app` that
+  constructs, mounts, and directly returns the same stable application.
+- Added exact literal `url_prefix` support for same-file and cross-file mounts.
+  Absolute, wildcard, dynamic, unresolved, or rebound imports; renamed or
+  decorated factories; missing or different returns; conditionally nested,
+  multiply mounted, expanded, dynamic-prefix, or other configured mounts; and
+  replaced Blueprint or application members remain fail-closed controls.
+- Added a source-matched Flask 3.1.3 / Werkzeug 3.1.8 cross-file application-
+  factory exploit/control pair and strict
+  `python-flask-cross-file-blueprint-open-redirect-manifest.json`. No-follow
+  TestClient witnesses prove attacker-origin selections of one and zero without
+  external I/O. The canonical corpus advances to 198 pairs, 396 cases, and
+  1,188 repeated scan positions.
+- Focused acceptance passes 45 Flask, canonical, and Rust bookkeeping tests
+  with 2,954 assertions. Types, build, formatting, the clean production
+  dependency audit, and both exact-version witnesses pass.
+- Full local acceptance runs 2,170 tests across 218 files: 2,137 pass, 31
+  intentional platform/integration skips, and only two expected managed-
+  sandbox failures. Both affected files pass natively at 48/48 tests and 242
+  assertions. The aggregate executes 16,924 assertions. Package, GUI, hosted,
+  and immutable-checkpoint evidence follows after the implementation
+  checkpoint.
 - Closed a measured Flask Blueprint false negative. Before the host change, an
   exact official `Blueprint` GET route mounted by a later exact
   `app.register_blueprint(bp)` emitted zero rows while all eleven previous Flask

@@ -185,6 +185,10 @@ jobs:
           "${{ runner.temp }}/fastapi-pydantic-witness/bin/python" \
             benchmarks/fixtures/python-flask-blueprint-safe-local-redirect/examples/witness.py
           "${{ runner.temp }}/fastapi-pydantic-witness/bin/python" \
+            benchmarks/fixtures/python-flask-cross-file-blueprint-open-redirect/examples/witness.py
+          "${{ runner.temp }}/fastapi-pydantic-witness/bin/python" \
+            benchmarks/fixtures/python-flask-cross-file-blueprint-safe-local-redirect/examples/witness.py
+          "${{ runner.temp }}/fastapi-pydantic-witness/bin/python" \
             benchmarks/fixtures/python-flask-post-open-redirect/examples/witness.py
           "${{ runner.temp }}/fastapi-pydantic-witness/bin/python" \
             benchmarks/fixtures/python-flask-post-safe-local-redirect/examples/witness.py

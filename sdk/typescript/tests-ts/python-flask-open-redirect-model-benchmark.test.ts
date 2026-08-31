@@ -146,6 +146,47 @@ describe("Flask open-redirect model", () => {
     expect(manifest.cases[1].expected).toEqual([]);
   });
 
+  test("keeps a strict cross-file Blueprint factory contract", async () => {
+    const manifest = JSON.parse(
+      await readFile(
+        join(
+          benchmarkRoot,
+          "python-flask-cross-file-blueprint-open-redirect-manifest.json",
+        ),
+        "utf8",
+      ),
+    );
+    expect(manifest.schemaVersion).toBe("1.0");
+    expect(
+      Object.values(manifest.thresholds).every(
+        (value) => value === 0 || value === 1,
+      ),
+    ).toBeTrue();
+    expect(manifest.cases.map(({ id }: { id: string }) => id)).toEqual([
+      "python-flask-cross-file-blueprint-open-redirect",
+      "python-flask-cross-file-blueprint-safe-local-redirect",
+    ]);
+    expect(manifest.cases[0].expected[0]).toMatchObject({
+      id: modelId,
+      cwe: ["CWE-601"],
+      requireValidation: true,
+      requireAttackPath: true,
+      requireCodeEvidence: true,
+    });
+    expect(manifest.cases[0].expected[0].requiredValidationTextAnyOf).toEqual(
+      expect.arrayContaining([
+        expect.arrayContaining(["relative import"]),
+        expect.arrayContaining(["create_app"]),
+        expect.arrayContaining(["register_blueprint"]),
+        expect.arrayContaining(["url_prefix"]),
+      ]),
+    );
+    expect(manifest.cases[0].expected[0].forbiddenText.length).toBeGreaterThan(
+      0,
+    );
+    expect(manifest.cases[1].expected).toEqual([]);
+  });
+
   test("separates the checked-in root-prefix exploit and fixed-local control", async () => {
     const exploit = join(
       benchmarkRoot,
@@ -246,6 +287,61 @@ describe("Flask open-redirect model", () => {
     expect(controlModels).toHaveLength(0);
   });
 
+  test("separates the checked-in cross-file Blueprint factory pair", async () => {
+    const exploit = join(
+      benchmarkRoot,
+      "fixtures",
+      "python-flask-cross-file-blueprint-open-redirect",
+    );
+    const control = join(
+      benchmarkRoot,
+      "fixtures",
+      "python-flask-cross-file-blueprint-safe-local-redirect",
+    );
+    const exploitModels = models(await buildResidualRiskInventory(exploit));
+    const controlModels = models(await buildResidualRiskInventory(control));
+
+    expect(exploitModels).toHaveLength(1);
+    expect(exploitModels[0]).toMatchObject({
+      source: {
+        kind: "flask-request-query-string",
+        path: "src/service/redirects.py",
+        line: 8,
+      },
+      sink: {
+        kind: "flask-redirect-location",
+        path: "src/service/redirects.py",
+        line: 11,
+        cweIds: ["CWE-601"],
+      },
+    });
+    expect(exploitModels[0].propagators).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: "relative-python-blueprint-module-import",
+          path: "src/service/__init__.py",
+          line: 6,
+        }),
+        expect.objectContaining({
+          kind: "flask-application-factory-function",
+          path: "src/service/__init__.py",
+          line: 4,
+        }),
+        expect.objectContaining({
+          kind: "flask-blueprint-literal-url-prefix",
+          path: "src/service/__init__.py",
+          line: 7,
+        }),
+        expect.objectContaining({
+          kind: "flask-application-factory-return",
+          path: "src/service/__init__.py",
+          line: 8,
+        }),
+      ]),
+    );
+    expect(controlModels).toHaveLength(0);
+  });
+
   test("accepts an exact registered Blueprint route", async () => {
     const root = await mkdtemp(join(tmpdir(), "flask-blueprint-redirect-"));
     try {
@@ -259,7 +355,7 @@ describe("Flask open-redirect model", () => {
           '    target = request.args.get("next", "")',
           '    destination = "/" + target',
           "    return redirect(destination, code=307)",
-          "app.register_blueprint(bp)",
+          'app.register_blueprint(bp, url_prefix="/links")',
           "",
         ].join("\n"),
       });
@@ -272,10 +368,325 @@ describe("Flask open-redirect model", () => {
             kind: "flask-official-blueprint-factory",
           }),
           expect.objectContaining({ kind: "flask-blueprint-registration" }),
+          expect.objectContaining({
+            kind: "flask-blueprint-literal-url-prefix",
+          }),
         ]),
       );
     } finally {
       await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  test("accepts the official cross-file Blueprint application-factory pattern", async () => {
+    const root = await mkdtemp(join(tmpdir(), "flask-blueprint-factory-"));
+    try {
+      await writeRepository(root, {
+        "service/__init__.py": [
+          "from flask import Flask",
+          "",
+          "def create_app():",
+          "    app = Flask(__name__)",
+          "    from . import redirects",
+          "    app.register_blueprint(redirects.bp)",
+          "    return app",
+          "",
+        ].join("\n"),
+        "service/redirects.py": [
+          "from flask import Blueprint, redirect, request",
+          'bp = Blueprint("redirects", __name__)',
+          '@bp.get("/continue")',
+          "def continue_to():",
+          '    target = request.args.get("next", "")',
+          '    destination = "/" + target',
+          "    return redirect(destination, code=307)",
+          "",
+        ].join("\n"),
+      });
+
+      const blueprintModels = models(await buildResidualRiskInventory(root));
+      expect(blueprintModels).toHaveLength(1);
+      expect(blueprintModels[0].propagators).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            kind: "relative-python-blueprint-module-import",
+            path: "service/__init__.py",
+            line: 5,
+          }),
+          expect.objectContaining({
+            kind: "flask-application-factory-return",
+            path: "service/__init__.py",
+            line: 7,
+          }),
+          expect.objectContaining({
+            kind: "flask-blueprint-registration",
+            path: "service/__init__.py",
+            line: 6,
+          }),
+        ]),
+      );
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  test("accepts exact relative Blueprint imports and literal URL prefixes", async () => {
+    const blueprint = [
+      "from flask import Blueprint, redirect, request",
+      'bp = Blueprint("redirects", __name__)',
+      '@bp.get("/continue")',
+      "def continue_to():",
+      '    target = request.args.get("next", "")',
+      '    destination = "/" + target',
+      "    return redirect(destination, code=307)",
+      "",
+    ].join("\n");
+    const applications: ReadonlyArray<readonly [string, string, string]> = [
+      [
+        "module-level-symbol-alias",
+        [
+          "from flask import Flask",
+          "from .redirects import bp as mounted",
+          "app = Flask(__name__)",
+          'app.register_blueprint(mounted, url_prefix="/links")',
+          "",
+        ].join("\n"),
+        "relative-python-blueprint-symbol-import",
+      ],
+      [
+        "factory-global-symbol",
+        [
+          "from flask import Flask",
+          "from .redirects import bp",
+          "",
+          "def make_app(config=None):",
+          "    app = Flask(__name__)",
+          "    app.register_blueprint(bp)",
+          "    return app",
+          "",
+        ].join("\n"),
+        "flask-application-factory-return",
+      ],
+      [
+        "factory-module-alias-prefix",
+        [
+          "from flask import Flask",
+          "",
+          "def create_app():",
+          "    app = Flask(__name__)",
+          "    from . import redirects as mounted",
+          '    app.register_blueprint(mounted.bp, url_prefix="/links")',
+          "    return app",
+          "",
+        ].join("\n"),
+        "flask-blueprint-literal-url-prefix",
+      ],
+    ];
+
+    for (const [name, application, expectedKind] of applications) {
+      const root = await mkdtemp(
+        join(tmpdir(), `flask-blueprint-import-positive-${name}-`),
+      );
+      try {
+        await writeRepository(root, {
+          "service/__init__.py": application,
+          "service/redirects.py": blueprint,
+        });
+        const blueprintModels = models(await buildResidualRiskInventory(root));
+        expect(blueprintModels, name).toHaveLength(1);
+        expect(blueprintModels[0].propagators, name).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({ kind: expectedKind }),
+            expect.objectContaining({
+              kind: "flask-blueprint-registration",
+              path: "service/__init__.py",
+            }),
+          ]),
+        );
+      } finally {
+        await rm(root, { recursive: true, force: true });
+      }
+    }
+  });
+
+  test("rejects ambiguous cross-file Blueprint reachability", async () => {
+    const application = [
+      "from flask import Flask",
+      "",
+      "def create_app():",
+      "    app = Flask(__name__)",
+      "    from . import redirects",
+      "    app.register_blueprint(redirects.bp)",
+      "    return app",
+      "",
+    ].join("\n");
+    const blueprint = [
+      "from flask import Blueprint, redirect, request",
+      'bp = Blueprint("redirects", __name__)',
+      '@bp.get("/continue")',
+      "def continue_to():",
+      '    target = request.args.get("next", "")',
+      '    destination = "/" + target',
+      "    return redirect(destination, code=307)",
+      "",
+    ].join("\n");
+    const variants: ReadonlyArray<
+      readonly [string, string, string, Record<string, string>?]
+    > = [
+      [
+        "unregistered",
+        application.replace("    app.register_blueprint(redirects.bp)\n", ""),
+        blueprint,
+      ],
+      [
+        "absolute-import",
+        application.replace("from . import redirects", "import redirects"),
+        blueprint,
+      ],
+      [
+        "renamed-factory",
+        application.replace("create_app", "build_app"),
+        blueprint,
+      ],
+      [
+        "decorated-factory",
+        application.replace(
+          "def create_app():",
+          "@decorate\ndef create_app():",
+        ),
+        blueprint,
+      ],
+      [
+        "missing-return",
+        application.replace("    return app\n", ""),
+        blueprint,
+      ],
+      [
+        "wrong-return",
+        application.replace("return app", "return object()"),
+        blueprint,
+      ],
+      [
+        "nested-registration",
+        application.replace(
+          "    app.register_blueprint(redirects.bp)",
+          "    if enabled:\n        app.register_blueprint(redirects.bp)",
+        ),
+        blueprint,
+      ],
+      [
+        "conditional-entire-factory-chain",
+        application.replace(
+          [
+            "    app = Flask(__name__)",
+            "    from . import redirects",
+            "    app.register_blueprint(redirects.bp)",
+            "    return app",
+          ].join("\n"),
+          [
+            "    if enabled:",
+            "        app = Flask(__name__)",
+            "        from . import redirects",
+            "        app.register_blueprint(redirects.bp)",
+            "        return app",
+          ].join("\n"),
+        ),
+        blueprint,
+      ],
+      [
+        "rebound-module",
+        application.replace(
+          "    app.register_blueprint(redirects.bp)",
+          "    redirects = object()\n    app.register_blueprint(redirects.bp)",
+        ),
+        blueprint,
+      ],
+      [
+        "rebound-module-member",
+        application.replace(
+          "    app.register_blueprint(redirects.bp)",
+          "    redirects.bp = object()\n    app.register_blueprint(redirects.bp)",
+        ),
+        blueprint,
+      ],
+      [
+        "rebound-application",
+        application.replace(
+          "    app.register_blueprint(redirects.bp)",
+          "    app = object()\n    app.register_blueprint(redirects.bp)",
+        ),
+        blueprint,
+      ],
+      [
+        "replaced-registration-member",
+        application.replace(
+          "    app.register_blueprint(redirects.bp)",
+          "    app.register_blueprint = lambda value: None\n    app.register_blueprint(redirects.bp)",
+        ),
+        blueprint,
+      ],
+      [
+        "dynamic-prefix",
+        application.replace(
+          "register_blueprint(redirects.bp)",
+          "register_blueprint(redirects.bp, url_prefix=prefix)",
+        ),
+        blueprint,
+      ],
+      [
+        "unknown-option",
+        application.replace(
+          "register_blueprint(redirects.bp)",
+          'register_blueprint(redirects.bp, subdomain="api")',
+        ),
+        blueprint,
+      ],
+      [
+        "multiple-registration",
+        application.replace(
+          "    return app",
+          "    app.register_blueprint(redirects.bp)\n    return app",
+        ),
+        blueprint,
+      ],
+      [
+        "rebound-exported-blueprint",
+        application,
+        blueprint.replace(
+          "    return redirect(destination, code=307)\n",
+          "    return redirect(destination, code=307)\n\nbp = object()\n",
+        ),
+      ],
+      [
+        "different-relative-module",
+        application.replace("from . import redirects", "from . import other"),
+        blueprint,
+        { "service/other.py": "bp = object()\n" },
+      ],
+    ];
+
+    for (const [
+      name,
+      candidateApplication,
+      candidateBlueprint,
+      extra,
+    ] of variants) {
+      const root = await mkdtemp(
+        join(tmpdir(), `flask-blueprint-import-negative-${name}-`),
+      );
+      try {
+        await writeRepository(root, {
+          "service/__init__.py": candidateApplication,
+          "service/redirects.py": candidateBlueprint,
+          ...extra,
+        });
+        expect(
+          models(await buildResidualRiskInventory(root)),
+          name,
+        ).toHaveLength(0);
+      } finally {
+        await rm(root, { recursive: true, force: true });
+      }
     }
   });
 
@@ -299,6 +710,20 @@ describe("Flask open-redirect model", () => {
         registered.replace(
           "register_blueprint(bp)",
           "register_blueprint(load(bp))",
+        ),
+      ],
+      [
+        "dynamic-prefix",
+        registered.replace(
+          "register_blueprint(bp)",
+          "register_blueprint(bp, url_prefix=prefix)",
+        ),
+      ],
+      [
+        "unsupported-option",
+        registered.replace(
+          "register_blueprint(bp)",
+          'register_blueprint(bp, subdomain="api")',
         ),
       ],
       [
@@ -793,6 +1218,9 @@ describe("Flask open-redirect model", () => {
     expect(prompt).toContain('methods=["POST"]');
     expect(prompt).toContain("flask.Blueprint");
     expect(prompt).toContain("register_blueprint");
+    expect(prompt).toContain("relative-python-blueprint-module-import");
+    expect(prompt).toContain("create_app");
+    expect(prompt).toContain("url_prefix");
     expect(prompt).toContain("flask.redirect");
     expect(prompt).toContain("Location");
     expect(prompt).toContain("root-only");

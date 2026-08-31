@@ -2,6 +2,68 @@
 
 This log records consequential implementation decisions, their evidence, and the tradeoffs that future scanner work must preserve.
 
+## 2026-08-30 — Resolve Flask Blueprint mounts across application factories
+
+**Measured gap and maintained contract.** The unchanged host emitted zero rows
+for Flask's maintained application-factory shape: an official Blueprint route
+in a sibling module, `from . import redirects` inside `create_app`, an exact
+`app.register_blueprint(redirects.bp)` call, and direct `return app`; all 15
+pre-existing Flask regressions passed with 103 assertions. Flask's maintained
+[application-factory documentation](https://flask.palletsprojects.com/en/stable/patterns/appfactories/)
+shows application construction, Blueprint imports, registration, and return in
+one factory. Its [Blueprint tutorial](https://flask.palletsprojects.com/en/stable/tutorial/views/)
+uses the exact relative-module registration pattern, while the
+[Blueprint documentation](https://flask.palletsprojects.com/en/stable/blueprints/)
+also documents literal `url_prefix` mounts. Python's maintained
+[import statement reference](https://docs.python.org/3/reference/simple_stmts.html#the-import-statement)
+defines the leading-dot relative import binding used by the resolver. CodeQL's
+high-precision
+[`py/url-redirection`](https://codeql.github.com/codeql-query-help/python/py-url-redirection/)
+remains the comparative CWE-601 source/sink baseline.
+
+**Typed cross-file decision.** A route file still needs one top-level official
+`flask.Blueprint` construction, one literal route decorator, stable request and
+redirect bindings, and the existing query/form-to-Location proof. A second file
+may now establish reachability through either `from .module import bp [as x]`
+or `from . import module [as x]` followed by `x` or `x.bp` registration. The
+resolver maps the explicit relative specifier to one exact repository path,
+requires the exported Blueprint binding to remain stable through module load,
+and keeps distinct import evidence. The registering side must use one stable
+official Flask instance at module scope or directly inside an undecorated top-
+level `create_app`/`make_app`. A factory registration is credited only when the
+same application is directly returned later at the same suite indentation.
+Same-file and cross-file registration may have no options or one literal
+`url_prefix`, which is recorded as separate evidence.
+
+**Fail-closed boundary.** Absolute, wildcard, dynamic, unresolved, or ambiguous
+imports do not create the edge. Blueprint/module/application rebinding,
+replaced route or registration members, repository-local Flask shadows,
+renamed or decorated factories, missing or different application returns,
+registration in a conditional or unrelated function, multiple mounts, star
+expansion, dynamic prefixes, and registration options other than one literal
+`url_prefix` remain negative. These exclusions preserve a reviewable import,
+construction, mount, and return chain rather than treating package membership
+or a Blueprint declaration as public reachability.
+
+**Executable corpus and initial acceptance.** The Flask 3.1.3 / Werkzeug 3.1.8
+twins use identical `src/service` packages, an official sibling Blueprint,
+`create_app`, explicit relative module import, literal `/links` mount, and
+direct application return. The exploit's root-only prefix produces a scheme-
+relative Location; the control percent-encodes the same value beneath the fixed
+local `/continue?next=` destination. TestClient disables redirect following and
+makes no external request. The strict dedicated manifest requires both file
+paths, relative import, factory construction and return, registration and
+literal prefix, request field, Location boundary, origin switch, control, and
+CWE-601 in the validation and attack path. The canonical corpus advances to
+198 pairs, 396 cases, and 1,188 repeated positions. Focused Flask, canonical,
+and Rust bookkeeping acceptance passes 45 tests and 2,954 assertions; both
+witnesses record attacker-origin selections one and zero. Types, build,
+formatting, and the production dependency audit pass. Full local acceptance
+runs 2,170 tests across 218 files with 2,137 passes, 31 intentional skips, and
+only the two expected managed-sandbox failures; both affected files pass
+natively at 48/48 tests and 242 assertions. The aggregate executes 16,924
+assertions. Package, GUI, hosted, and immutable-checkpoint evidence follows.
+
 ## 2026-08-30 — Bind Flask Blueprint routes to an exact application mount
 
 **Measured gap and maintained contract.** The unchanged host emitted zero rows

@@ -1,0 +1,89 @@
+{
+  "schemaVersion": "1.0",
+  "thresholds": {
+    "minCompletionRate": 1,
+    "minPrecision": 1,
+    "minRecall": 1,
+    "minF1": 1,
+    "minCasePassRate": 1,
+    "minNegativeCasePassRate": 1,
+    "minStableDetectionRate": 1,
+    "minValidationRate": 1,
+    "minAttackPathRate": 1,
+    "minCodeEvidenceRate": 1,
+    "minSeverityAccuracy": 1,
+    "maxFalsePositivesPerRun": 0
+  },
+  "cases": [
+    {
+      "id": "python-flask-cross-file-blueprint-open-redirect",
+      "description": "A named Flask application factory imports a sibling official Blueprint, mounts it with a literal URL prefix, returns the official application, and exposes a query value behind only a root slash as an attacker-selected Location.",
+      "fixture": "fixtures/python-flask-cross-file-blueprint-open-redirect",
+      "findingsPaths": [
+        "python-flask-cross-file-blueprint-open-redirect/run-1/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "python-flask-open-redirect",
+          "cwe": ["CWE-601"],
+          "locations": [
+            {
+              "path": "src/service/redirects.py",
+              "startLine": 11,
+              "endLine": 11,
+              "lineTolerance": 1
+            }
+          ],
+          "acceptableSeverities": ["high", "medium"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true,
+          "requiredValidationTextAnyOf": [
+            ["Flask Blueprint", "Blueprint route", "bp.get"],
+            ["relative import", "sibling module", "from . import redirects"],
+            ["create_app", "application factory", "returned Flask application"],
+            [
+              "register_blueprint",
+              "Blueprint registration",
+              "application mount"
+            ],
+            ["url_prefix", "/links", "literal URL prefix"],
+            ["request.args", "query string", "query field"],
+            ["Location header", "redirect location"],
+            ["root-only prefix", "scheme-relative", "double slash"],
+            ["fixed local prefix", "allowlist", "same-origin"],
+            ["CWE-601", "open redirect"]
+          ],
+          "requiredAttackPathTextAnyOf": [
+            ["GET /links/continue", "bp.get", "Blueprint route"],
+            ["relative import", "redirects.bp", "sibling Blueprint"],
+            ["create_app", "return app", "application factory"],
+            ["register_blueprint", "url_prefix", "/links"],
+            ["request.args", "next", "query value"],
+            ["root-only prefix", "\"/\" + encoded", "double slash"],
+            ["Location", "redirect target"],
+            ["attacker.invalid", "attacker-selected origin", "external origin"],
+            ["follow_redirects=False", "does not follow", "no external request"]
+          ],
+          "forbiddenText": [
+            "the witness contacted attacker.invalid",
+            "proves the endpoint is publicly reachable",
+            "proves credentials were stolen",
+            "every imported Flask Blueprint is reachable",
+            "a missing factory return still exposes the route",
+            "the host is fully compromised"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "python-flask-cross-file-blueprint-safe-local-redirect",
+      "description": "The source-matched cross-file application-factory control percent-encodes the same hostile query value beneath a fixed non-root local redirect target.",
+      "fixture": "fixtures/python-flask-cross-file-blueprint-safe-local-redirect",
+      "findingsPaths": [
+        "python-flask-cross-file-blueprint-safe-local-redirect/run-1/findings.json"
+      ],
+      "expected": []
+    }
+  ]
+}

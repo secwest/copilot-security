@@ -14,24 +14,34 @@ suppresses the right operand of string concatenation when the left operand
 controls the prefix. Copilot Security distinguishes a non-root fixed local
 prefix from a root-only slash: `"/" + "/attacker.invalid/path"` produces the
 scheme-relative `//attacker.invalid/path` Location and remains reportable.
-The typed Flask model also requires exact application, route, request,
-query-or-form field, redirect, and Location evidence. A same-file official
-Blueprint route is accepted only when a later exact top-level official Flask
-application calls `register_blueprint` with that same stable Blueprint. Flask
-documents that
-[Blueprints record operations that become application routes when registered](https://flask.palletsprojects.com/en/stable/blueprints/).
-It also documents
+The typed Flask model also requires exact application, route, request, query-
+or-form field, redirect, and Location evidence. A same-file official Blueprint
+route is accepted only when a later exact top-level official Flask application
+mounts that same stable Blueprint. The cross-file model additionally resolves
+one explicit relative symbol or module import to the exact Blueprint file and
+requires either a stable top-level Flask application or an undecorated
+`create_app`/`make_app` that constructs, mounts, and directly returns the same
+application. One literal `url_prefix` is the only accepted registration option.
+This mirrors Flask's maintained
+[application-factory pattern](https://flask.palletsprojects.com/en/stable/patterns/appfactories/)
+and [Blueprint tutorial](https://flask.palletsprojects.com/en/stable/tutorial/views/),
+while its Blueprint documentation establishes that
+[recorded operations become application routes when registered](https://flask.palletsprojects.com/en/stable/blueprints/).
+Flask also documents
 [`request.form`](https://flask.palletsprojects.com/en/stable/api/#flask.Request.form)
-as its form-parameter `ImmutableMultiDict`, and documents `post()` as the exact
+as its form-parameter `ImmutableMultiDict`, and `post()` as the exact
 [`route(..., methods=["POST"])` shortcut](https://flask.palletsprojects.com/en/stable/api/#flask.Flask.post).
-The host therefore accepts a form source only under an exact POST, PUT, or
-PATCH shortcut or static literal route-method collection. Default/GET/DELETE
-routes, empty or dynamic method collections, shadows, rebindings, unmounted,
-scoped, nested-only, dynamic, or multiple Blueprint registration, ambiguous
-decorators or arguments, unsupported collections, and opaque transformations
-fail closed. Separate pinned no-follow application-query, Blueprint-query, and
-form Flask/Werkzeug exploit/control pairs prove the authority switch and fixed-
-local control without external I/O.
+
+The host accepts a form source only under an exact POST, PUT, or PATCH shortcut
+or static literal route-method collection. Default/GET/DELETE routes, empty or
+dynamic method collections, shadows, rebindings, absolute, wildcard, dynamic,
+or unresolved Blueprint imports, missing factory returns, renamed or decorated
+factories, unmounted, conditionally nested, dynamic-prefix, other configured,
+or multiple Blueprint registrations, ambiguous decorators or arguments,
+unsupported collections, and opaque transformations fail closed. Separate
+pinned no-follow application-query, same-file Blueprint-query, cross-file
+application-factory Blueprint-query, and form Flask/Werkzeug exploit/control
+pairs prove the authority switch and fixed-local control without external I/O.
 
 The parallel typed Django model requires an official `path` or `re_path`
 binding inside one balanced `urlpatterns` list, a resolvable registered

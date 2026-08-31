@@ -677,6 +677,10 @@ describe("effectiveness benchmark", () => {
         "python-flask-blueprint-safe-local-redirect",
       ],
       [
+        "python-flask-cross-file-blueprint-open-redirect",
+        "python-flask-cross-file-blueprint-safe-local-redirect",
+      ],
+      [
         "python-flask-post-open-redirect",
         "python-flask-post-safe-local-redirect",
       ],

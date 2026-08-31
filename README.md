@@ -87,28 +87,37 @@ parameters, extra `Annotated` metadata, duplicate URL or response-class roles,
 wildcard route options, guarded or opaque direct returns, star expansion,
 local package shadows, replaced response bindings, and lookalikes fail closed.
 Flask redirects have a separate typed CWE-601 model. It requires either an
-official `flask.Flask` application route or an official same-file
-`flask.Blueprint` route with a later exact `app.register_blueprint(bp)` mount,
-one stable
-`flask.request.args` query field or `flask.request.form` form field, and an
-official `flask.redirect` Location sink. Form data additionally requires an
-exact `post`, `put`, or `patch` shortcut or a static literal `methods` list or
-tuple containing POST, PUT, or PATCH; default routes, GET, DELETE, empty lists,
-and dynamic method collections do not prove form reachability. It supports
-direct, qualified, subscript, and relative-wrapper forms without promoting an
-unmounted, dynamically mounted, nested-only, multiply mounted, or scoped
-Blueprint declaration, local lookalikes, rebound bindings, unsupported
-collections, opaque transformations, or ambiguous arguments. A non-root fixed
-local prefix is a control; a root-only `"/" + value` is not, because a value
-beginning with slash becomes a scheme-relative `//attacker.invalid/...`
-redirect. Separate pinned Flask/Werkzeug application-query, Blueprint-query,
-and POST-form pairs use
-`follow_redirects=False` and inspect only the emitted Location. Flask documents
+official `flask.Flask` application route or an official `flask.Blueprint` route
+with a proved application mount, one stable `flask.request.args` query field or
+`flask.request.form` form field, and an official `flask.redirect` Location sink.
+A Blueprint may be mounted later in the same file or imported explicitly from
+one relative sibling module. Cross-file evidence resolves the exact imported
+symbol or `module.blueprint` member and requires either a stable top-level
+official Flask application or an undecorated top-level `create_app`/`make_app`
+factory that constructs, mounts, and directly returns the same application.
+Registration accepts no option except one literal `url_prefix`. Form data
+additionally requires an exact `post`, `put`, or `patch` shortcut or a static
+literal `methods` list or tuple containing POST, PUT, or PATCH; default routes,
+GET, DELETE, empty lists, and dynamic method collections do not prove form
+reachability. The model supports direct, qualified, subscript, and relative-
+wrapper flows without promoting an unmounted, absolute- or wildcard-imported,
+dynamically mounted, conditionally nested, multiply mounted, rebound, or
+unresolved Blueprint declaration, a renamed or decorated factory, a missing
+application return, local lookalikes, unsupported collections, opaque
+transformations, or ambiguous arguments. A non-root fixed local prefix is a
+control; a root-only `"/" + value` is not, because a value beginning with slash
+becomes a scheme-relative `//attacker.invalid/...` redirect. Separate pinned
+Flask/Werkzeug application-query, same-file Blueprint, cross-file application-
+factory Blueprint, and POST-form pairs use `follow_redirects=False` and inspect
+only the emitted Location. Flask documents
 [`request.form` as the form-parameter collection](https://flask.palletsprojects.com/en/stable/api/#flask.Request.form)
 and `post()` as the exact [`methods=["POST"]` route shortcut](https://flask.palletsprojects.com/en/stable/api/#flask.Flask.post).
 Its [Blueprint documentation](https://flask.palletsprojects.com/en/stable/blueprints/)
-separately establishes that recorded Blueprint routes become application routes
-when the Blueprint is registered.
+establishes that recorded Blueprint routes become application routes when the
+Blueprint is registered, while the maintained
+[application-factory pattern](https://flask.palletsprojects.com/en/stable/patterns/appfactories/)
+and [Blueprint tutorial](https://flask.palletsprojects.com/en/stable/tutorial/views/)
+show the cross-module import, registration, and return sequence.
 Registered Django function and class-based views now have the same typed
 treatment without collapsing the frameworks into a name-matched rule. The
 Django model requires an official `path` or `re_path` call inside the sole
