@@ -3114,6 +3114,10 @@ The ninth preserves the same request value through the live Python built-in
 Location; its topology-matched control converts the same value but redirects it
 only on exact membership in the immutable tuple and otherwise selects
 `/account`.
+The tenth reads the same attacker-selected query field through Flask's official
+`request.values` CombinedMultiDict. Its exploit emits the value directly as
+Location; its topology-matched control admits only exact immutable tuple
+members and otherwise selects `/account`.
 The first seven exploits prepend only `/`
 and pass the result to the official `flask.redirect`; the leading slash in
 the supplied value produces a scheme-relative `//attacker.invalid/...`
@@ -3121,7 +3125,9 @@ Location. Each topology-matched control percent-encodes the same value below
 the non-root fixed `/continue?next=` target. The eighth sends the selected
 absolute URL directly on inverted membership and falls back to `/account` on
 positive membership. The ninth does the same with a built-in conversion before
-the policy boundary. All fixtures pin Flask 3.1.3 and
+the policy boundary. The tenth uses a GET query field, matching Flask's
+documented rule that only query arguments are present in `values` for GET. All
+fixtures pin Flask 3.1.3 and
 Werkzeug 3.1.8, disable redirect following, and make no external request.
 
 The model accepts form data only for exact POST, PUT, or PATCH shortcuts or a
@@ -3157,6 +3163,15 @@ propagator and reuses that same-value proof for the immutable allowlist. Local
 definitions, parameters, assignments anywhere in the handler's lexical scope,
 custom imports, rebound official aliases, keywords, expansion, extra
 arguments, nesting, and qualified lookalikes are not promoted to the built-in.
+
+Combined request-value propagation is similarly bounded. The model accepts an
+exact official `request.values.get` call with one literal non-empty field and
+an optional literal or `None` default, or one literal subscript. It records a
+distinct combined query/form source and does not apply the form-only route
+gate, since a query field can populate `values` on every reachable route.
+Dynamic fields or defaults, keyword or expanded calls, extra arguments,
+unsupported accessors, singular lookalikes, local shadows, and rebound request
+bindings remain unproved.
 
 ```powershell
 node ../../benchmarks/run-benchmark.mjs `

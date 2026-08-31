@@ -1,0 +1,87 @@
+{
+  "schemaVersion": "1.0",
+  "thresholds": {
+    "minCompletionRate": 1,
+    "minPrecision": 1,
+    "minRecall": 1,
+    "minF1": 1,
+    "minCasePassRate": 1,
+    "minNegativeCasePassRate": 1,
+    "minStableDetectionRate": 1,
+    "minValidationRate": 1,
+    "minAttackPathRate": 1,
+    "minCodeEvidenceRate": 1,
+    "minSeverityAccuracy": 1,
+    "maxFalsePositivesPerRun": 0
+  },
+  "cases": [
+    {
+      "id": "python-flask-values-open-redirect",
+      "description": "An official Flask request.values query field is emitted as an attacker-selected Location without destination restriction.",
+      "fixture": "fixtures/python-flask-values-open-redirect",
+      "findingsPaths": [
+        "python-flask-values-open-redirect/run-1/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "python-flask-open-redirect",
+          "cwe": ["CWE-601"],
+          "locations": [
+            {
+              "path": "src/server.py",
+              "startLine": 9,
+              "endLine": 9,
+              "lineTolerance": 1
+            }
+          ],
+          "acceptableSeverities": ["high", "medium"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true,
+          "requiredValidationTextAnyOf": [
+            ["Flask route", "app.get", "GET /continue"],
+            ["request.values", "CombinedMultiDict", "combined query/form"],
+            ["next", "query field", "remote input"],
+            ["flask.redirect", "Location header", "redirect target"],
+            [
+              "immutable allowlist",
+              "same-origin allowlist",
+              "destination restriction"
+            ],
+            ["CWE-601", "open redirect"]
+          ],
+          "requiredAttackPathTextAnyOf": [
+            ["GET /continue", "Flask route", "app.get"],
+            ["request.values", "CombinedMultiDict", "query/form"],
+            ["next", "query value", "attacker-selected value"],
+            ["redirect(target", "flask.redirect", "redirect helper"],
+            ["Location", "absolute URL", "external origin"],
+            [
+              "attacker.invalid",
+              "attacker-selected origin",
+              "campaign=flask-values"
+            ],
+            ["follow_redirects=False", "does not follow", "no external request"]
+          ],
+          "forbiddenText": [
+            "request.values validates the destination",
+            "CombinedMultiDict lookup is a sanitizer",
+            "every request.values use is vulnerable",
+            "the witness contacted attacker.invalid",
+            "every Flask redirect is vulnerable",
+            "the host is fully compromised"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "python-flask-values-allowlist-safe-redirect",
+      "description": "The topology-matched control reads request.values but redirects only immutable allowlist members and otherwise selects a fixed local fallback.",
+      "fixture": "fixtures/python-flask-values-allowlist-safe-redirect",
+      "findingsPaths": [
+        "python-flask-values-allowlist-safe-redirect/run-1/findings.json"
+      ],
+      "expected": []
+    }
+  ]
+}

@@ -159,6 +159,47 @@ describe("Flask open-redirect model", () => {
     expect(manifest.cases[1].expected).toEqual([]);
   });
 
+  test("keeps a strict request.values contract", async () => {
+    const manifest = JSON.parse(
+      await readFile(
+        join(benchmarkRoot, "python-flask-values-open-redirect-manifest.json"),
+        "utf8",
+      ),
+    );
+    expect(manifest.schemaVersion).toBe("1.0");
+    expect(
+      Object.values(manifest.thresholds).every(
+        (value) => value === 0 || value === 1,
+      ),
+    ).toBeTrue();
+    expect(manifest.cases.map(({ id }: { id: string }) => id)).toEqual([
+      "python-flask-values-open-redirect",
+      "python-flask-values-allowlist-safe-redirect",
+    ]);
+    expect(manifest.cases[0].expected[0]).toMatchObject({
+      id: modelId,
+      cwe: ["CWE-601"],
+      requireValidation: true,
+      requireAttackPath: true,
+      requireCodeEvidence: true,
+    });
+    expect(manifest.cases[0].expected[0].requiredValidationTextAnyOf).toEqual(
+      expect.arrayContaining([
+        expect.arrayContaining(["request.values"]),
+        expect.arrayContaining(["CombinedMultiDict"]),
+        expect.arrayContaining(["immutable allowlist"]),
+      ]),
+    );
+    expect(manifest.cases[0].expected[0].forbiddenText).toEqual(
+      expect.arrayContaining([
+        "request.values validates the destination",
+        "CombinedMultiDict lookup is a sanitizer",
+        "every request.values use is vulnerable",
+      ]),
+    );
+    expect(manifest.cases[1].expected).toEqual([]);
+  });
+
   test("keeps a strict POST form exploit/control benchmark contract", async () => {
     const manifest = JSON.parse(
       await readFile(
@@ -490,6 +531,34 @@ describe("Flask open-redirect model", () => {
     expect(exploitModels[0].propagators).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ kind: "python-builtin-string-conversion" }),
+        expect.objectContaining({ kind: "http-location-header-assignment" }),
+      ]),
+    );
+    expect(controlModels).toHaveLength(0);
+  });
+
+  test("separates the checked-in request.values exploit and allowlist control", async () => {
+    const exploit = join(
+      benchmarkRoot,
+      "fixtures",
+      "python-flask-values-open-redirect",
+    );
+    const control = join(
+      benchmarkRoot,
+      "fixtures",
+      "python-flask-values-allowlist-safe-redirect",
+    );
+    const exploitModels = models(await buildResidualRiskInventory(exploit));
+    const controlModels = models(await buildResidualRiskInventory(control));
+
+    expect(exploitModels).toHaveLength(1);
+    expect(exploitModels[0]).toMatchObject({
+      source: { kind: "flask-request-values-string" },
+      sink: { kind: "flask-redirect-location", cweIds: ["CWE-601"] },
+    });
+    expect(exploitModels[0].propagators).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ kind: "flask-request-values-read" }),
         expect.objectContaining({ kind: "http-location-header-assignment" }),
       ]),
     );
@@ -2165,6 +2234,158 @@ describe("Flask open-redirect model", () => {
     }
   });
 
+  test("tracks request.values as combined query and form input", async () => {
+    const exploit = await mkdtemp(join(tmpdir(), "flask-values-exploit-"));
+    const control = await mkdtemp(join(tmpdir(), "flask-values-control-"));
+    try {
+      const source = (location: string) =>
+        [
+          "from flask import Flask, redirect, request",
+          "app = Flask(__name__)",
+          '@app.get("/continue")',
+          "def continue_to():",
+          `    return redirect(${location}, code=307)`,
+          "",
+        ].join("\n");
+      await writeRepository(exploit, {
+        "server.py": source('request.values.get("next", "")'),
+      });
+      await writeRepository(control, {
+        "server.py": source('"/account"'),
+      });
+
+      const exploitModels = models(await buildResidualRiskInventory(exploit));
+      const controlModels = models(await buildResidualRiskInventory(control));
+      expect(exploitModels).toHaveLength(1);
+      expect(exploitModels[0]).toMatchObject({
+        source: { kind: "flask-request-values-string" },
+        sink: { kind: "flask-redirect-location", cweIds: ["CWE-601"] },
+      });
+      expect(exploitModels[0].propagators).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ kind: "flask-request-values-read" }),
+        ]),
+      );
+      expect(controlModels).toHaveLength(0);
+    } finally {
+      await rm(exploit, { recursive: true, force: true });
+      await rm(control, { recursive: true, force: true });
+    }
+  });
+
+  test("bounds request.values identity and access shapes", async () => {
+    const server = (
+      decorator: string,
+      read: string,
+      beforeRead: readonly string[] = [],
+    ) =>
+      [
+        "from flask import Flask, redirect, request",
+        "app = Flask(__name__)",
+        decorator,
+        "def continue_to():",
+        ...beforeRead.map((line) => `    ${line}`),
+        `    target = ${read}`,
+        "    return redirect(target, code=307)",
+        "",
+      ].join("\n");
+    const accepted: ReadonlyArray<readonly [string, string]> = [
+      [
+        "get-with-default",
+        server('@app.get("/continue")', 'request.values.get("next", "")'),
+      ],
+      [
+        "get-without-default",
+        server('@app.get("/continue")', 'request.values.get("next")'),
+      ],
+      [
+        "literal-subscript",
+        server('@app.get("/continue")', 'request.values["next"]'),
+      ],
+      [
+        "post-combined-collection",
+        server('@app.post("/continue")', 'request.values.get("next", None)'),
+      ],
+    ];
+    for (const [name, source] of accepted) {
+      const root = await mkdtemp(join(tmpdir(), `flask-values-${name}-`));
+      try {
+        await writeRepository(root, { "server.py": source });
+        const detected = models(await buildResidualRiskInventory(root));
+        expect(detected, name).toHaveLength(1);
+        expect(detected[0], name).toMatchObject({
+          source: { kind: "flask-request-values-string" },
+        });
+        expect(detected[0].propagators, name).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({ kind: "flask-request-values-read" }),
+          ]),
+        );
+      } finally {
+        await rm(root, { recursive: true, force: true });
+      }
+    }
+
+    const rejected: ReadonlyArray<readonly [string, string]> = [
+      [
+        "dynamic-field",
+        server('@app.get("/continue")', "request.values.get(field)", [
+          'field = "next"',
+        ]),
+      ],
+      [
+        "dynamic-default",
+        server(
+          '@app.get("/continue")',
+          'request.values.get("next", fallback)',
+          ['fallback = ""'],
+        ),
+      ],
+      [
+        "keyword-field",
+        server('@app.get("/continue")', 'request.values.get(key="next")'),
+      ],
+      [
+        "expanded-arguments",
+        server('@app.get("/continue")', "request.values.get(*parts)", [
+          'parts = ("next", "")',
+        ]),
+      ],
+      [
+        "type-conversion-argument",
+        server('@app.get("/continue")', 'request.values.get("next", "", str)'),
+      ],
+      [
+        "unsupported-accessor",
+        server('@app.get("/continue")', 'request.values.getlist("next")[0]'),
+      ],
+      [
+        "singular-lookalike",
+        server('@app.get("/continue")', 'request.value.get("next", "")'),
+      ],
+      [
+        "rebound-request",
+        server('@app.get("/continue")', 'request.values.get("next", "")', [
+          "request = None",
+        ]),
+      ],
+    ];
+    for (const [name, source] of rejected) {
+      const root = await mkdtemp(
+        join(tmpdir(), `flask-values-rejected-${name}-`),
+      );
+      try {
+        await writeRepository(root, { "server.py": source });
+        expect(
+          models(await buildResidualRiskInventory(root)),
+          name,
+        ).toHaveLength(0);
+      } finally {
+        await rm(root, { recursive: true, force: true });
+      }
+    }
+  });
+
   test("distinguishes an inverted redirect allowlist from an immutable allowlist", async () => {
     const source = (operator: "in" | "not in") =>
       [
@@ -2776,6 +2997,10 @@ describe("Flask open-redirect model", () => {
     expect(prompt).toContain("single-positional-argument str(object)");
     expect(prompt).toContain("live Python built-in");
     expect(prompt).toContain("string conversion itself as sanitization");
+    expect(prompt).toContain("flask-request-values-string");
+    expect(prompt).toContain("request.values");
+    expect(prompt).toContain("CombinedMultiDict");
+    expect(prompt).toContain("Do not require a POST, PUT, or PATCH route");
     expect(prompt).toContain("follow_redirects=False");
     expect(prompt).toContain("CWE-601");
   });

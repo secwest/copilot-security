@@ -124,6 +124,13 @@ Python's string conversion changes representation but does not validate a URL;
 shadowed, parameter-bound, locally defined, reassigned, keyword, expanded,
 multi-argument, nested, and qualified-lookalike callables remain unproved.
 Positive immutable-allowlist control continues to apply to the converted value.
+The same model recognizes exact `request.values.get` and literal-subscript
+reads from the stable official Flask request binding. Flask defines `values` as
+the combined query/form collection and limits it to query arguments on GET;
+the scanner records that distinct provenance without incorrectly requiring a
+form-capable route. Dynamic fields or defaults, keyword/expanded/extra
+arguments, unsupported accessors, request shadows, and rebound bindings remain
+unproved.
 Separate pinned
 Flask/Werkzeug application-query, same-file Blueprint, nested Blueprint, nested
 application-factory Blueprint, cross-file application-factory Blueprint,

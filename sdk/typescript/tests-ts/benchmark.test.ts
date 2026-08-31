@@ -701,6 +701,10 @@ describe("effectiveness benchmark", () => {
         "python-flask-builtin-str-allowlist-safe-redirect",
       ],
       [
+        "python-flask-values-open-redirect",
+        "python-flask-values-allowlist-safe-redirect",
+      ],
+      [
         "python-flask-post-open-redirect",
         "python-flask-post-safe-local-redirect",
       ],

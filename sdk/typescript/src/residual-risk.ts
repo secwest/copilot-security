@@ -2193,6 +2193,10 @@ const FRAMEWORK_DATAFLOW_MODELS: readonly FrameworkDataflowModel[] = [
         kind: "flask-request-form-string",
         expression: /\bform\s*(?:\.|\[)/u,
       },
+      {
+        kind: "flask-request-values-string",
+        expression: /\bvalues\s*(?:\.|\[)/u,
+      },
     ],
     sinks: [
       {
@@ -4642,8 +4646,10 @@ const PYTHON_FLASK_OPEN_REDIRECT_FIELD_EVIDENCE_REQUIREMENTS = [
   [
     "request.args",
     "request.form",
+    "request.values",
     "query string",
     "form field",
+    "combined query and form",
     "remote input",
   ],
   ["flask.redirect", "Location header", "redirect location"],
@@ -41858,7 +41864,10 @@ function pythonFastApiOpenRedirectSource(
 }
 
 interface PythonFlaskRequestStringSource {
-  kind: "flask-request-form-string" | "flask-request-query-string";
+  kind:
+    | "flask-request-form-string"
+    | "flask-request-query-string"
+    | "flask-request-values-string";
   line: number;
   propagators: Array<{
     kind: string;
@@ -43083,20 +43092,23 @@ function pythonFlaskRequestDataEvidence(
     .join("\n")
     .trim();
   const get =
-    /^([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)?)\s*\.\s*(args|form)\s*\.\s*get\s*\(/u.exec(
+    /^([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)?)\s*\.\s*(args|form|values)\s*\.\s*get\s*\(/u.exec(
       value,
     );
   const subscript =
-    /^([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)?)\s*\.\s*(args|form)\s*\[\s*([\s\S]+)\s*\]$/u.exec(
+    /^([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)?)\s*\.\s*(args|form|values)\s*\[\s*([\s\S]+)\s*\]$/u.exec(
       value,
     );
-  let collection: "args" | "form";
+  let collection: "args" | "form" | "values";
   let requestExpression: string | undefined;
   let field: string | undefined;
-  if (get?.[1] !== undefined && (get[2] === "args" || get[2] === "form")) {
+  if (
+    get?.[1] !== undefined &&
+    (get[2] === "args" || get[2] === "form" || get[2] === "values")
+  ) {
     const arguments_ = pythonCallArgumentsForExpression(
       value,
-      /^([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)?)\s*\.\s*(?:args|form)\s*\.\s*get\s*\(/u,
+      /^([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)?)\s*\.\s*(?:args|form|values)\s*\.\s*get\s*\(/u,
     );
     if (
       arguments_ === undefined ||
@@ -43125,7 +43137,9 @@ function pythonFlaskRequestDataEvidence(
     collection = get[2];
   } else if (
     subscript?.[1] !== undefined &&
-    (subscript[2] === "args" || subscript[2] === "form") &&
+    (subscript[2] === "args" ||
+      subscript[2] === "form" ||
+      subscript[2] === "values") &&
     subscript[3] !== undefined
   ) {
     field = pythonLiteralStringValue(subscript[3]);
@@ -43147,7 +43161,9 @@ function pythonFlaskRequestDataEvidence(
     kind:
       collection === "args"
         ? "flask-request-query-string"
-        : "flask-request-form-string",
+        : collection === "form"
+          ? "flask-request-form-string"
+          : "flask-request-values-string",
     line: origin.line,
     propagators: [
       {
@@ -43160,7 +43176,9 @@ function pythonFlaskRequestDataEvidence(
         kind:
           collection === "args"
             ? "flask-request-args-read"
-            : "flask-request-form-read",
+            : collection === "form"
+              ? "flask-request-form-read"
+              : "flask-request-values-read",
         path,
         line: origin.line,
         symbol: `request.${collection}[${JSON.stringify(field)}]`,

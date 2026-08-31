@@ -7,6 +7,54 @@ All notable scanner, application, benchmark, and operational changes are recorde
 ### Scanner effectiveness
 
 - Closed a measured Flask open-redirect false negative. The unchanged model
+  ignored an attacker-selected GET query field read through the official
+  `request.values` collection before `flask.redirect`; all 43 preceding Flask
+  tests passed and only the new case failed, with 320 assertions.
+- Added a distinct `flask-request-values-string` source and
+  `flask-request-values-read` provenance for exact `.get` and literal-subscript
+  access through the stable official request binding. The source preserves
+  Flask's combined query/form semantics without applying the form-only route
+  gate, because query arguments populate `values` on every reachable route.
+- Added four accepted access/route forms, eight dynamic, ambiguous, unsupported,
+  or rebound controls, and a Flask 3.1.3/Werkzeug 3.1.8 executable pair. The
+  exploit emits the hostile GET query value as Location; the topology-matched
+  control permits only immutable tuple members and otherwise selects
+  `/account`. Both witnesses disable redirect following and perform no external
+  I/O. The canonical corpus advances to 204 pairs, 408 cases, and 1,224 repeated
+  scan positions.
+- The dedicated Flask lane passes 47 tests with 354 assertions; the adjacent
+  Flask, canonical, Rust bookkeeping, and Python-datamodel lane passes 81 tests
+  with 3,281 assertions. Both exact-version witnesses reproduce the hostile
+  query-to-Location and allowlisted-control differential.
+- The full managed suite exercises 2,197 tests across 218 files: 2,164 pass, 31
+  are intentional platform or integration skips, and only the two established
+  managed-sandbox Git-metadata and Windows-ACL checks fail. Their unchanged
+  native rerun passes 48/48 tests with 242 assertions; the aggregate executes
+  17,205 assertions. Generated-model drift, TypeScript, the clean production
+  build, formatting, and the live production dependency audit are green, with
+  no known vulnerabilities.
+- A whole-repository self-scan retains exactly one
+  `flask-request-values-string` CWE-601 row at the exploit and no row at the
+  topology-matched allowlisted control. Two SDK-root self-scans are
+  byte-identical at 256 rows, 259,242 bytes, and SHA-256
+  `5d9443f1e440e664c3d4b099c4eae2610a5d03e3019781319e42b7981b30a970`;
+  86 rows cover production source across 17 category signals.
+- Two independently built 299-entry npm archives are byte-identical at
+  2,499,986 bytes with SHA-256
+  `79db9f39969c24d0b5d020acfe89c582b5dfc4bacd722d5b6718f9e18f839f3b`.
+  Two fresh 67-package consumers validate the public API, executable CLI, and
+  all 79 bundled plugin files. Windows builds with zero warnings/errors, passes
+  7/7 core and 3/3 shared tests, and survives a verified hidden startup; its
+  346,796-byte executable has SHA-256
+  `da74330cff4354451f318c15efee0040bf545847da34ac90b74f9e16b8f37096`.
+  Ubuntu/WSL builds with zero warnings/errors; 7/7 core, 3/3 shared, and 2/2
+  Linux UI tests pass, followed by non-graphical and X11/Xvfb startup. The
+  72,568-byte Linux executable has SHA-256
+  `7e29d642169a6c218c249216c6c10648307aea88faf636b69ac25741104b4adf`.
+  All disposable package, consumer, and publish trees were removed after
+  verification. Hosted and immutable-checkpoint evidence follows after the
+  implementation commit.
+- Closed a measured Flask open-redirect false negative. The unchanged model
   discarded a request query value wrapped by the live Python built-in
   `str(object)` before `flask.redirect`; 39 preceding Flask tests passed and
   only the new case failed, with 283 assertions.
