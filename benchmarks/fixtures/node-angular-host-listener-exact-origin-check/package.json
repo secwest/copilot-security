@@ -1,0 +1,11 @@
+{
+  "name": "node-angular-host-listener-exact-origin-check",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "witness": "node examples/witness.mjs"
+  },
+  "dependencies": {
+    "@angular/core": "20.0.0"
+  }
+}

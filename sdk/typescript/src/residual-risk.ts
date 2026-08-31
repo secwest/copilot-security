@@ -4738,6 +4738,15 @@ const NODE_VUE_ROUTER_CLIENT_REQUEST_FORGERY_FIELD_EVIDENCE_REQUIREMENTS = [
   ["CWE-918", "client-side request forgery", "request forgery"],
 ] as const;
 
+const NODE_ANGULAR_HOST_LISTENER_ORIGIN_FIELD_EVIDENCE_REQUIREMENTS = [
+  ["Angular", "@angular/core", "HostListener"],
+  ["window:message", "document:message", "message event"],
+  ["$event", "MessageEvent", "event parameter"],
+  ["event.data", "message payload", "remote message data"],
+  ["event.origin", "event.source", "exact trusted origin", "sender identity"],
+  ["CWE-20", "CWE-940", "missing origin verification"],
+] as const;
+
 const NODE_MCP_TOOL_SSRF_FIELD_EVIDENCE_REQUIREMENTS = [
   ["MCP tool", "registerTool", "server.tool", "tool callback"],
   ["tool input", "callback input", "LLM-controlled", "client-controlled"],
@@ -4888,6 +4897,13 @@ const MODEL_SPECIFIC_FINDING_REQUIREMENTS: ReadonlyMap<
         NODE_VUE_ROUTER_CLIENT_REQUEST_FORGERY_FIELD_EVIDENCE_REQUIREMENTS,
       attackPath:
         NODE_VUE_ROUTER_CLIENT_REQUEST_FORGERY_FIELD_EVIDENCE_REQUIREMENTS,
+    },
+  ],
+  [
+    "node-angular-host-listener-missing-origin-check",
+    {
+      validation: NODE_ANGULAR_HOST_LISTENER_ORIGIN_FIELD_EVIDENCE_REQUIREMENTS,
+      attackPath: NODE_ANGULAR_HOST_LISTENER_ORIGIN_FIELD_EVIDENCE_REQUIREMENTS,
     },
   ],
   [
@@ -5228,6 +5244,7 @@ export async function buildResidualRiskInventory(
   records.push(...nodeExpressOpenRedirectRecords(sourceFiles));
   records.push(...nodeFastifyOpenRedirectRecords(sourceFiles));
   records.push(...nodeVueRouterClientRequestForgeryRecords(sourceFiles));
+  records.push(...nodeAngularHostListenerMissingOriginRecords(sourceFiles));
   records.push(...nodePlateMediaEmbedXssRecords(sourceFiles));
   records.push(...nodeDefuddleExtractorXssRecords(sourceFiles));
   records.push(...nodePickemTerminalInjectionRecords(sourceFiles));
@@ -26612,6 +26629,363 @@ function nodeVueRouterClientRequestForgeryRecords(
           if (records.length >= MAX_FRAMEWORK_CROSS_FILE_RECORDS)
             return records;
         }
+      }
+    }
+  }
+  return records;
+}
+
+function nodeAngularTrustedOriginLiteral(value: string): boolean {
+  const match = /^(["'])(https?:\/\/[^/?#\s"']+)\1$/iu.exec(value.trim());
+  if (match?.[2] === undefined) return false;
+  try {
+    const parsed = new URL(match[2]);
+    return (
+      parsed.host !== "" &&
+      parsed.pathname === "/" &&
+      parsed.search === "" &&
+      parsed.hash === "" &&
+      parsed.username === "" &&
+      parsed.password === ""
+    );
+  } catch {
+    return false;
+  }
+}
+
+function nodeAngularActiveClassScopes(
+  lines: readonly string[],
+  activations: readonly ImportedJavascriptSymbol[],
+): Array<{ decoratorLine: number; endLine: number; startLine: number }> {
+  const original = lines.join("\n");
+  const structural = javascriptStructuralLines(lines).join("\n");
+  const scopes: Array<{
+    decoratorLine: number;
+    endLine: number;
+    startLine: number;
+  }> = [];
+  for (const activation of activations) {
+    const active = escapeRegularExpression(activation.local);
+    for (const call of javascriptCallsInText(
+      original,
+      structural,
+      1,
+      new RegExp("@" + active + "\\s*", "u"),
+    )) {
+      if (
+        javascriptIdentifierReassignedBetween(
+          lines,
+          activation.local,
+          activation.line,
+          call.line,
+        )
+      ) {
+        continue;
+      }
+      const afterDecorator = structural.slice(call.close + 1);
+      const classMatch =
+        /^\s*(?:(?:export\s+(?:default\s+)?)?abstract\s+|export\s+(?:default\s+)?)?class\s+[A-Za-z_$][\w$]*[^{]*\{/u.exec(
+          afterDecorator,
+        );
+      if (classMatch === null) continue;
+      const classOffset =
+        call.close +
+        1 +
+        (classMatch.index ?? 0) +
+        classMatch[0].lastIndexOf("class");
+      const startLine =
+        1 + (structural.slice(0, classOffset).match(/\n/gu)?.length ?? 0);
+      scopes.push({
+        decoratorLine: call.line,
+        startLine,
+        endLine: javascriptFunctionEndLine(lines, startLine - 1),
+      });
+    }
+  }
+  return scopes.filter(
+    (scope, index, all) =>
+      all.findIndex(
+        (candidate) =>
+          candidate.startLine === scope.startLine &&
+          candidate.endLine === scope.endLine,
+      ) === index,
+  );
+}
+
+function nodeAngularGuardEndLine(
+  lines: readonly string[],
+  startIndex: number,
+): number {
+  const structural = javascriptStructuralLines(lines);
+  let depth = 0;
+  let opened = false;
+  for (let index = startIndex; index < structural.length; index += 1) {
+    for (const character of structural[index] ?? "") {
+      if (character === "{") {
+        depth += 1;
+        opened = true;
+      } else if (character === "}" && opened) {
+        depth -= 1;
+      }
+    }
+    if (opened && depth <= 0) return index + 1;
+  }
+  return startIndex + 1;
+}
+
+function nodeAngularMessageOriginGuard(
+  lines: readonly string[],
+  parameter: string,
+  methodLine: number,
+  payloadLine: number,
+): boolean {
+  const escaped = escapeRegularExpression(parameter);
+  const member = (name: "origin" | "source"): string =>
+    `${escaped}\\s*(?:\\.\\s*${name}\\b|\\[\\s*["']${name}["']\\s*\\])`;
+  const codeLines = javascriptCodeLinesWithoutComments(lines);
+  for (let index = methodLine; index < payloadLine - 1; index += 1) {
+    const line = codeLines[index] ?? "";
+    const originReject = new RegExp(
+      `^\\s*if\\s*\\(\\s*${member("origin")}\\s*!==?\\s*([^\\)]+)\\)\\s*(?:\\{\\s*)?(?:return\\b|throw\\b)`,
+      "u",
+    ).exec(line);
+    if (
+      originReject?.[1] !== undefined &&
+      nodeAngularTrustedOriginLiteral(originReject[1])
+    ) {
+      return true;
+    }
+    const sourceReject = new RegExp(
+      `^\\s*if\\s*\\(\\s*${member("source")}\\s*!==?\\s*(?:window\\s*\\.\\s*(?:parent|opener)|globalThis\\s*\\.\\s*(?:parent|opener))\\s*\\)\\s*(?:\\{\\s*)?(?:return\\b|throw\\b)`,
+      "u",
+    );
+    if (sourceReject.test(line)) return true;
+    const multilineOriginReject = new RegExp(
+      "^\\s*if\\s*\\(\\s*" +
+        member("origin") +
+        "\\s*!==?\\s*([^\\)]+)\\)\\s*\\{\\s*$",
+      "u",
+    ).exec(line);
+    const multilineSourceReject = new RegExp(
+      "^\\s*if\\s*\\(\\s*" +
+        member("source") +
+        "\\s*!==?\\s*(?:window\\s*\\.\\s*(?:parent|opener)|globalThis\\s*\\.\\s*(?:parent|opener))\\s*\\)\\s*\\{\\s*$",
+      "u",
+    ).test(line);
+    if (
+      (multilineOriginReject?.[1] !== undefined &&
+        nodeAngularTrustedOriginLiteral(multilineOriginReject[1])) ||
+      multilineSourceReject
+    ) {
+      let statementIndex = index + 1;
+      while (
+        statementIndex < payloadLine - 1 &&
+        (codeLines[statementIndex] ?? "").trim() === ""
+      ) {
+        statementIndex += 1;
+      }
+      if (/^\s*(?:return\b|throw\b)/u.test(codeLines[statementIndex] ?? "")) {
+        return true;
+      }
+    }
+    const originAccept = new RegExp(
+      "^\\s*if\\s*\\(\\s*" +
+        member("origin") +
+        "\\s*===?\\s*([\"'])(https?:\\/\\/[^\\/?#\\s\"']+)\\1\\s*\\)\\s*\\{",
+      "u",
+    ).exec(line);
+    if (
+      originAccept?.[2] !== undefined &&
+      nodeAngularTrustedOriginLiteral(
+        (originAccept[1] ?? '"') + originAccept[2] + (originAccept[1] ?? '"'),
+      ) &&
+      payloadLine <= nodeAngularGuardEndLine(lines, index)
+    ) {
+      return true;
+    }
+    const sourceAccept = new RegExp(
+      `^\\s*if\\s*\\(\\s*${member("source")}\\s*===?\\s*(?:window\\s*\\.\\s*(?:parent|opener)|globalThis\\s*\\.\\s*(?:parent|opener))\\s*\\)\\s*\\{`,
+      "u",
+    );
+    if (
+      sourceAccept.test(line) &&
+      payloadLine <= nodeAngularGuardEndLine(lines, index)
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function nodeAngularHostListenerMissingOriginRecords(
+  files: readonly SourceFileSnapshot[],
+): ResidualRiskRecord[] {
+  const records: ResidualRiskRecord[] = [];
+  for (const file of files) {
+    if (
+      !JAVASCRIPT_EXTENSIONS.has(file.extension) ||
+      javascriptTestOrExamplePath(file.path)
+    ) {
+      continue;
+    }
+    const dependency = nodeRuntimeDependency(files, file.path, "@angular/core");
+    const major = Number(dependency?.version.split(".")[0]);
+    if (dependency === undefined || !Number.isInteger(major) || major < 2)
+      continue;
+    const imports = importedJavascriptSymbols(file.lines).filter(
+      ({ moduleSpecifier }) => moduleSpecifier === "@angular/core",
+    );
+    const hostListeners = imports.filter(
+      ({ imported }) => imported === "HostListener",
+    );
+    const activations = imports.filter(
+      ({ imported }) => imported === "Component" || imported === "Directive",
+    );
+    if (hostListeners.length === 0 || activations.length === 0) continue;
+    const structural = javascriptStructuralLines(file.lines);
+    const codeLines = javascriptCodeLinesWithoutComments(file.lines);
+    const activeScopes = nodeAngularActiveClassScopes(file.lines, activations);
+    if (activeScopes.length === 0) continue;
+    for (const hostListener of hostListeners) {
+      const host = escapeRegularExpression(hostListener.local);
+      if (
+        javascriptIdentifierReassignedBetween(
+          file.lines,
+          hostListener.local,
+          hostListener.line,
+          file.lines.length,
+        )
+      ) {
+        continue;
+      }
+      for (
+        let index = hostListener.line;
+        index < structural.length;
+        index += 1
+      ) {
+        const decorator = new RegExp(
+          `^\\s*@${host}\\s*\\(\\s*(["'])(window|document):message\\1\\s*,\\s*\\[\\s*(["'])\\$event\\3\\s*\\]\\s*\\)\\s*$`,
+          "u",
+        ).exec(javascriptCodeBeforeComment(file.lines[index] ?? ""));
+        if (decorator?.[2] === undefined) continue;
+        let methodIndex = index + 1;
+        while (
+          methodIndex < structural.length &&
+          structural[methodIndex]!.trim() === ""
+        ) {
+          methodIndex += 1;
+        }
+        const method =
+          /^\s*(?:public\s+|protected\s+|private\s+)?(?:async\s+)?([A-Za-z_$][\w$]*)\s*\(\s*([A-Za-z_$][\w$]*)(?:\s*:\s*[^)=]+)?\s*\)\s*(?::\s*[^\{]+)?\s*\{/u.exec(
+            structural[methodIndex] ?? "",
+          );
+        if (method?.[1] === undefined || method[2] === undefined) continue;
+        const methodLine = methodIndex + 1;
+        const endLine = javascriptFunctionEndLine(file.lines, methodIndex);
+        const activeScope = activeScopes.find(
+          ({ startLine, endLine: classEndLine }) =>
+            index + 1 > startLine && endLine <= classEndLine,
+        );
+        if (activeScope === undefined) continue;
+        const parameter = method[2];
+        const data = new RegExp(
+          `\\b${escapeRegularExpression(parameter)}\\s*(?:\\.\\s*data\\b|\\[\\s*["']data["']\\s*\\])`,
+          "u",
+        );
+        const payloadIndex = codeLines
+          .slice(methodIndex + 1, endLine)
+          .findIndex((line) => data.test(line));
+        if (payloadIndex < 0) continue;
+        const payloadLine = methodIndex + payloadIndex + 2;
+        if (
+          javascriptIdentifierReassignedBetween(
+            file.lines,
+            parameter,
+            methodLine,
+            payloadLine,
+          ) ||
+          nodeAngularMessageOriginGuard(
+            file.lines,
+            parameter,
+            methodLine,
+            payloadLine,
+          )
+        ) {
+          continue;
+        }
+        const startLine = Math.max(1, index + 1 - CONTEXT_LINES_BEFORE);
+        const finishLine = Math.min(
+          file.lines.length,
+          payloadLine + CONTEXT_LINES_AFTER,
+        );
+        records.push({
+          path: file.path,
+          line: methodLine,
+          categories: [
+            "framework-dataflow:node-angular-host-listener-missing-origin-check",
+            "modeled-source:angular-postmessage-event",
+            "modeled-sink:message-payload-use-without-sender-authorization",
+          ],
+          priority: 109,
+          startLine,
+          endLine: finishLine,
+          excerpt: sourceExcerpt(file.lines, startLine, finishLine),
+          sourceExcerpt: sourceExcerpt(
+            file.lines,
+            methodLine,
+            Math.min(file.lines.length, payloadLine),
+          ),
+          frameworkModel: {
+            schemaVersion: "1.2",
+            id: "node-angular-host-listener-missing-origin-check",
+            language: "javascript-typescript",
+            scope: "same-file",
+            source: {
+              kind: "angular-postmessage-event",
+              path: file.path,
+              line: methodLine,
+            },
+            sink: {
+              kind: "message-payload-use-without-sender-authorization",
+              path: file.path,
+              line: payloadLine,
+              cweIds: ["CWE-20", "CWE-940"],
+            },
+            propagators: [
+              {
+                kind: "angular-host-listener-binding",
+                path: file.path,
+                line: hostListener.line,
+                symbol: hostListener.local,
+              },
+              {
+                kind: "angular-active-class-decorator",
+                path: file.path,
+                line: activeScope.decoratorLine,
+              },
+              {
+                kind: "angular-global-message-listener",
+                path: file.path,
+                line: index + 1,
+                symbol: `${decorator[2]}:message`,
+              },
+              {
+                kind: "angular-message-event-parameter",
+                path: file.path,
+                line: methodLine,
+                symbol: parameter,
+              },
+              {
+                kind: "angular-runtime-dependency",
+                path: dependency.manifestPath,
+                line: dependency.line,
+                symbol: `@angular/core@${dependency.version}:${dependency.proof}`,
+              },
+            ],
+            candidateControls: [],
+          },
+        });
+        if (records.length >= MAX_FRAMEWORK_CROSS_FILE_RECORDS) return records;
       }
     }
   }

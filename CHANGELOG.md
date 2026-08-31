@@ -6,6 +6,64 @@ All notable scanner, application, benchmark, and operational changes are recorde
 
 ### Scanner effectiveness
 
+- Closed a measured Angular `HostListener("window:message")` false negative.
+  The unchanged scanner emitted no structured row for an active Angular 20
+  component that consumed `event.data` from the official global message
+  listener without checking `event.origin` or `event.source`. The minimal
+  exploit regression failed before implementation, while its topology-matched
+  exact-origin control remained unreported.
+- Added the bounded
+  `node-angular-host-listener-missing-origin-check` model. It requires an exact
+  production `@angular/core` dependency, stable official `Component` or
+  `Directive` and `HostListener` imports, proof that the listener belongs to
+  the activated class, literal `window:message` or `document:message` plus
+  exact `["$event"]` mapping, a stable one-parameter method, and actual
+  `event.data` use. The model emits CWE-20 and CWE-940 evidence and the reviewer
+  now has a model-specific sender-authorization contract.
+- Credited only complete literal HTTP(S) origin equality and stable
+  `window`/`globalThis` `parent` or `opener` identity checks that fail closed
+  before payload use, including common one-line, multiline, and positive
+  allow-block forms. Exact explicit default ports remain valid controls.
+  Suffix/substring checks and post-use checks remain candidates. Unresolved or
+  development-only dependencies, local decorator lookalikes, inactive classes,
+  rebound imports or event parameters, missing or dynamic event mappings,
+  unused payloads, and tests/examples fail closed.
+- Added a pinned Angular 20.0.0 exploit/control pair, strict specialized
+  manifest, and offline synthetic-event witnesses. The exploit accepts both
+  trusted and attacker payloads; the matched control accepts only the exact
+  trusted origin. Both witnesses pass without starting Angular or making a
+  network request. The canonical benchmark advances to 208 exploit/control
+  pairs, 416 cases, and 1,248 repeated scan positions.
+- Added focused coverage for aliased directives/listeners, document targets,
+  literal bracket payload access, positive and negative origin/source guards,
+  multiline component metadata, explicit default ports, weak and late checks,
+  activation-scope isolation, dependency/path/event lookalikes, model-specific
+  narrative evidence, reviewer instructions, fixture pairing, and canonical
+  corpus integrity. The adjacent model/corpus lane passes 35 tests and 2,954
+  assertions.
+- The authoritative native Windows suite passes 2,256 tests with 31 intentional
+  skips and 17,439 assertions across 222 files in 1,074.22 seconds. The managed
+  sandbox first exposed its expected temporary-Git and credential-home ACL
+  restrictions; exact native reruns passed, followed by the single clean
+  authoritative run. Formatting, generated-model drift, TypeScript checking,
+  the clean production build, and the production advisory audit are green.
+- Two fresh npm archives are byte-identical at 2,531,024 bytes with 299 entries
+  and SHA-256
+  `484487d27e4bd06dd27f7c608162008d41e39e20d4e347e26ae739b898cfe197`.
+  Strict inspection and an isolated install validate 67 production packages,
+  the public API, executable CLI, and all 79 bundled plugin files.
+- Two compiled whole-repository inventories are byte-identical at 256 rows and
+  639,432 bytes with SHA-256
+  `d37fe52efccfa7fa1ef129775d9fe306f4d85001d05c9af40e90a70c4857eec1`.
+  Exactly one Angular row identifies the intentional exploit at source line 8
+  and payload sink line 9; the matched exact-origin control is absent.
+- Windows builds without warnings/errors, passes 7/7 core and 3/3 shared
+  desktop tests, and publishes a 346,796-byte executable with SHA-256
+  `5c15f0b0c16efa279148ce6e6d08bd714e0c098c97fa73de80dc707ea9192244`.
+  Ubuntu/WSL restores the locked graph, builds without warnings/errors, passes
+  the same suites plus 2/2 headless interface checks, and passes non-graphical
+  and X11/Xvfb startup; its 72,568-byte executable has SHA-256
+  `7e29d642169a6c218c249216c6c10648307aea88faf636b69ac25741104b4adf`.
 - Closed a measured Vue Router client-side request-forgery false negative. The
   unchanged scanner emitted no structured row when an exact production
   `vue-router` application read `route.query.resource` from the official

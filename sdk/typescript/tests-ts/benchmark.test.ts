@@ -711,6 +711,10 @@ describe("effectiveness benchmark", () => {
         "node-vue-router-fixed-endpoint-request",
       ],
       [
+        "node-angular-host-listener-missing-origin-check",
+        "node-angular-host-listener-exact-origin-check",
+      ],
+      [
         "python-flask-post-open-redirect",
         "python-flask-post-safe-local-redirect",
       ],

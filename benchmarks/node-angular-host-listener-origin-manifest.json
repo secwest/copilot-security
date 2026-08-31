@@ -1,0 +1,84 @@
+{
+  "schemaVersion": "1.0",
+  "thresholds": {
+    "minCompletionRate": 1,
+    "minPrecision": 1,
+    "minRecall": 1,
+    "minF1": 1,
+    "minCasePassRate": 1,
+    "minNegativeCasePassRate": 1,
+    "minStableDetectionRate": 1,
+    "minValidationRate": 1,
+    "minAttackPathRate": 1,
+    "minCodeEvidenceRate": 1,
+    "minSeverityAccuracy": 1,
+    "maxFalsePositivesPerRun": 0
+  },
+  "cases": [
+    {
+      "id": "node-angular-host-listener-missing-origin-check",
+      "description": "An active Angular component consumes a global message event payload without authenticating the sender origin or window.",
+      "fixture": "fixtures/node-angular-host-listener-missing-origin-check",
+      "findingsPaths": [
+        "node-angular-host-listener-missing-origin-check/run-1/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "node-angular-host-listener-missing-origin-check",
+          "cwe": ["CWE-20", "CWE-940"],
+          "locations": [
+            {
+              "path": "src/message.component.ts",
+              "startLine": 9,
+              "endLine": 9,
+              "lineTolerance": 1
+            }
+          ],
+          "acceptableSeverities": ["high", "medium"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true,
+          "requiredValidationTextAnyOf": [
+            ["Angular 20", "@angular/core@20.0.0", "Angular version"],
+            ["HostListener", "official Angular binding", "@angular/core"],
+            ["window:message", "global message target", "message event"],
+            ["$event", "MessageEvent", "event parameter"],
+            ["event.data", "message payload", "remote message data"],
+            ["event.origin", "event.source", "sender authorization"],
+            ["CWE-20", "CWE-940", "missing origin verification"]
+          ],
+          "requiredAttackPathTextAnyOf": [
+            ["Angular 20", "@angular/core@20.0.0", "HostListener"],
+            ["window:message", "global message target", "message event"],
+            ["cross-origin window", "reachable window", "iframe"],
+            ["$event", "MessageEvent", "event parameter"],
+            ["event.data.action", "event.data", "message payload"],
+            ["exact origin", "source identity", "sender authorization"],
+            ["no network request", "synthetic event", "does not start Angular"]
+          ],
+          "forbiddenText": [
+            "the witness made a network request",
+            "the witness started Angular",
+            "proves code execution",
+            "proves DOM injection",
+            "proves credentials were stolen",
+            "proves a privileged action occurred",
+            "proves the application is publicly reachable",
+            "every HostListener is vulnerable",
+            "every message handler is vulnerable",
+            "the host is fully compromised"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "node-angular-host-listener-exact-origin-check",
+      "description": "The topology-matched control rejects non-trusted complete origins before consuming the same global message payload.",
+      "fixture": "fixtures/node-angular-host-listener-exact-origin-check",
+      "findingsPaths": [
+        "node-angular-host-listener-exact-origin-check/run-1/findings.json"
+      ],
+      "expected": []
+    }
+  ]
+}

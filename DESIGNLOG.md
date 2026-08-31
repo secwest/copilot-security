@@ -2,6 +2,111 @@
 
 This log records consequential implementation decisions, their evidence, and the tradeoffs that future scanner work must preserve.
 
+## 2026-08-31 — Authenticate Angular global HostListener message senders
+
+**Measured gap and comparator.** A minimal Angular 20 component imported the
+official `Component` and `HostListener` decorators, bound an active class method
+to `window:message` with `["$event"]`, and consumed `event.data.action` without
+checking the sender. The unchanged deterministic scanner emitted no specialized
+row, so the focused exploit/control regression failed before implementation.
+[CodeQL 2.26.1](https://codeql.github.com/docs/codeql-overview/codeql-changelog/codeql-cli-2.26.1/)
+added Angular `HostListener` window/document message handlers and their event
+parameters to its `js/missing-origin-check` modeling. CodeQL's
+[query help](https://codeql.github.com/codeql-query-help/javascript/js-missing-origin-check/)
+classifies the boundary as CWE-20 and CWE-940. Angular's official
+[`HostListener` API](https://v20.angular.dev/api/core/HostListener) documents
+global `window:` and `document:` targets, while
+[MDN's `postMessage` guidance](https://developer.mozilla.org/en-US/docs/Web/API/Window/postMessage)
+explains that reachable windows can send messages and receivers should verify
+the exact origin and, where appropriate, the source window.
+
+**Typed decision.** Emit
+`node-angular-host-listener-missing-origin-check` only beneath an exact
+production `@angular/core` dependency with integer major 2 or newer. Prove
+stable official named or aliased imports for `HostListener` and either
+`Component` or `Directive`; parse the activation decorator through its complete
+metadata call; associate it with the immediately decorated class; and require
+the listener method to remain inside that class scope. The listener itself must
+use the literal global target `window:message` or `document:message`, the exact
+`["$event"]` argument mapping, and one stable method parameter whose `data`
+member is actually read. Source, sink, activation, listener, event-parameter,
+and exact dependency proof are preserved as typed propagators.
+
+**Precision improvement over the comparator.** The maintained CodeQL query
+flags a message handler when it finds no origin/source equality or inclusion
+check. This scanner additionally requires actual payload use and exact Angular
+runtime/activation provenance before creating a candidate. A complete literal
+HTTP(S) origin equality, including scheme, host, and explicit or implicit port,
+is credited only when it rejects before data use or encloses that use in a
+positive allow-block. Stable identity checks against
+`window.parent`, `window.opener`, `globalThis.parent`, or
+`globalThis.opener` receive the same treatment. Suffix, substring, regex,
+payload-field, type-only, or post-use checks are not sender authorization.
+Ranges without fresh lock proof, development-only dependencies, test/example
+paths, local decorator lookalikes, rebound imports or parameters, listeners in
+an inactive sibling class, dynamic/missing `$event` mappings, other events or
+targets, and unused payloads fail closed.
+
+**Parser correction.** Positive exact-origin blocks initially remained
+reportable even though their syntax matched. The shared legacy brace helper
+removed `//` comments before recognizing quoted strings, so an opening brace
+after `"https://..."` disappeared and the block appeared to end on its first
+line. The Angular model now measures guard blocks from the existing
+comment-aware, string-aware structural representation. A dedicated regression
+preserves the observed `https://` case; the generic helper is deliberately not
+changed in this bounded increment.
+
+**Reviewer and benchmark contract.** The reviewer must reopen and name the
+Angular version and exact dependency proof, official imports, activated class,
+global message target, `$event` mapping, `MessageEvent` parameter,
+`event.data` use, reachable window relationship, and absence or weakness of an
+earlier exact origin/source boundary. Both validation and attack-path
+narratives require CWE-20/CWE-940. They may not infer code execution, DOM
+injection, credential theft, a privileged action, or public reachability
+without separate sinks and deployment evidence. The pinned Angular 20.0.0 pair
+shares one topology. Its offline exploit witness accepts trusted and attacker
+events; the control's complete-origin check rejects the attacker event. Neither
+witness starts Angular or performs I/O. The specialized manifest gates perfect
+precision, recall, stability, narrative quality, code evidence, and zero false
+positives. The canonical corpus now contains 208 pairs, 416 cases, and 1,248
+repeated scan positions.
+
+**Regression and acceptance evidence.** Ten focused tests cover fixture pairing,
+aliased `Directive`/`HostListener` imports, both global targets, dot and literal
+bracket payload reads, exact negative and positive origin/source controls,
+one-line and multiline rejection, default ports, weak and post-use checks,
+activation-scope isolation, dependency/path/mapping lookalikes, narrative
+quality, and reviewer instructions. Together with benchmark integrity and the
+adjacent corpus-count guard, 35 tests pass with 2,954 assertions. Both offline
+witnesses pass. The authoritative native Windows suite passes 2,256 tests with
+31 intentional skips and 17,439 assertions across 222 files in 1,074.22
+seconds. The first managed run's six failures were entirely the expected stale
+compiled-build gate plus denied temporary-Git and credential-home ACL
+operations; rebuilding and native exact reruns closed each one before the
+single clean authoritative run. Formatting, generated-model drift, TypeScript,
+the production build, and the production advisory audit pass.
+
+Two fresh 299-entry npm archives are byte-identical at 2,531,024 bytes with
+SHA-256
+`484487d27e4bd06dd27f7c608162008d41e39e20d4e347e26ae739b898cfe197`.
+Strict inspection and isolated installation validate 67 production packages,
+public import, the executable CLI, and all 79 bundled plugin files. Two compiled
+whole-repository inventories are byte-identical at 256 rows and 639,432 bytes
+with SHA-256
+`d37fe52efccfa7fa1ef129775d9fe306f4d85001d05c9af40e90a70c4857eec1`.
+They contain exactly the intentional Angular exploit row at source line 8 and
+payload sink line 9; the exact-origin control is absent.
+
+Windows builds without warnings/errors, passes 7/7 core and 3/3 shared desktop
+tests, and publishes a 346,796-byte executable with SHA-256
+`5c15f0b0c16efa279148ce6e6d08bd714e0c098c97fa73de80dc707ea9192244`.
+Ubuntu/WSL restores the locked graph, builds without warnings/errors, passes
+those suites plus 2/2 headless interface tests, and passes non-graphical and
+X11/Xvfb startup. Its 72,568-byte executable has SHA-256
+`7e29d642169a6c218c249216c6c10648307aea88faf636b69ac25741104b4adf`.
+Hosted evidence will be appended after the public implementation checkpoint.
+The continuing effectiveness goal remains active.
+
 ## 2026-08-31 — Model Vue Router browser URLs at fetch argument zero
 
 **Measured gap and comparator.** A minimal exact Vue Router 5 application used
