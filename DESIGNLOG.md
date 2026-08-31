@@ -87,8 +87,27 @@ non-graphical and X11/Xvfb startup. The self-contained Linux executable is
 72,568 bytes with SHA-256
 `7e29d642169a6c218c249216c6c10648307aea88faf636b69ac25741104b4adf`.
 Every disposable archive, consumer, and platform-publish tree is removed after
-verification. Hosted and immutable-checkpoint evidence will be appended after
-the implementation commit.
+verification.
+
+**Hosted and immutable closure.** Exact implementation commit
+`5f367c9a5842144edd26461b8f947bbae8131431` produces a reproducible
+3,811,774-byte tracked `tar.gz` source archive with SHA-256
+`032f47dda2a3c5945b41f26534e0a338dcee7959ad83b5dcf916483d17c53660`;
+the disposable archive is removed after hashing. All 11 exact-head workflow
+families pass: [Node `33389282537`](https://github.com/secwest/copilot-security/actions/runs/33389282537)
+with 92/92 successful jobs,
+[container `33389282338`](https://github.com/secwest/copilot-security/actions/runs/33389282338),
+[Windows GUI `33389282424`](https://github.com/secwest/copilot-security/actions/runs/33389282424),
+[Linux GUI `33389282350`](https://github.com/secwest/copilot-security/actions/runs/33389282350),
+[Java `33389282337`](https://github.com/secwest/copilot-security/actions/runs/33389282337),
+[.NET `33389282478`](https://github.com/secwest/copilot-security/actions/runs/33389282478),
+[Go `33389282346`](https://github.com/secwest/copilot-security/actions/runs/33389282346),
+[Kotlin `33389282375`](https://github.com/secwest/copilot-security/actions/runs/33389282375),
+[Rust `33389282341`](https://github.com/secwest/copilot-security/actions/runs/33389282341),
+[Ruby `33389282405`](https://github.com/secwest/copilot-security/actions/runs/33389282405),
+and [PHP `33389282390`](https://github.com/secwest/copilot-security/actions/runs/33389282390).
+This closes the bounded request-values increment without completing the broader
+scanner-effectiveness goal.
 
 ## 2026-08-31 — Preserve Flask redirect taint through live Python string conversion
 
