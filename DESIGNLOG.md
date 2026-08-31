@@ -45,6 +45,42 @@ pairs, 400 cases, and 1,200 repeated positions. Focused Flask, canonical, and
 Rust bookkeeping acceptance passes 55 tests and 3,036 assertions. Full local,
 package, GUI, hosted, and immutable-checkpoint evidence follows.
 
+**Acceptance and distribution evidence.** Full local acceptance runs 2,180
+tests across 218 files: 2,147 pass, 31 intentional platform/integration skips,
+and only the same two managed-sandbox permission failures. Both affected files
+pass natively at 48/48 tests and 242 assertions. The aggregate executes 17,006
+assertions. Generated-model drift, TypeScript, the production build, repository
+formatting, the live production audit, and both exact-version witnesses pass.
+
+Exact implementation checkpoint
+`68f470055f4cd9c0e7e2e6df49af8d37e6a57bd2` has a 3,788,109-byte tracked
+source archive (SHA-256
+`0f52baa87e02030772f821df5f8b91d1781a65b8205476d9590dca2ba3d31b5b`).
+Two independently built 299-entry npm packages are byte-identical at 2,494,642
+bytes (SHA-256
+`3c24c5d060907ce04aaef7c64ed7121137926444c2bf4b9710761dd9355efe76`).
+Strict inspection and a fresh 67-package installation validate the public API,
+CLI, and all 79 bundled plugin files.
+
+Windows builds with zero warnings/errors, passes 7/7 core and 3/3 shared tests,
+and passes a verified hidden startup. Its 346,796-byte executable has SHA-256
+`a8edf3f35c0578e44f00257734961f2a78b5b86b52acc2d417bc2354a34a0939`.
+Ubuntu/WSL locked restore and build also have zero warnings/errors; 7/7 core,
+3/3 shared, and 2/2 Linux UI tests pass, followed by non-graphical and real
+X11/Xvfb startup. Its 72,568-byte executable has SHA-256
+`7e29d642169a6c218c249216c6c10648307aea88faf636b69ac25741104b4adf`.
+
+A tracked-only extraction of the exact checkpoint passes deep/xhigh dry-run
+preflight with three fresh-session attempts, `gpt-5.6-terra`, scanner-owned
+output, `GH_TOKEN` absent, and stored-credential selection. The dry run starts
+no model runtime and creates neither output nor persistent scanner state; it is
+not evidence of a completed or clean self-scan. All 11 exact-checkpoint hosted
+workflow families pass: Node `33358327904` (92/92 jobs), container
+`33358327915`, Windows GUI `33358327869`, Linux GUI `33358327980`, .NET
+`33358327884`, Go `33358327909`, Java `33358327893`, Kotlin `33358327887`, PHP
+`33358327907`, Ruby `33358327900`, and Rust `33358327873`. GitHub reports the
+repository public with default branch `main`.
+
 ## 2026-08-30 — Prove one-level nested Flask Blueprint reachability
 
 **Measured gap and maintained contract.** The unchanged host emitted zero rows

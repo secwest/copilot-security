@@ -27,8 +27,38 @@ All notable scanner, application, benchmark, and operational changes are recorde
   origin selections one and zero without external I/O. The canonical corpus
   advances to 200 pairs, 400 cases, and 1,200 repeated scan positions.
 - Focused Flask, canonical, and Rust bookkeeping acceptance passes 55 tests
-  with 3,036 assertions. Full local and distribution evidence follows the
-  implementation checkpoint.
+  with 3,036 assertions. Full local acceptance runs 2,180 tests across 218
+  files: 2,147 pass, 31 intentional platform/integration skips, and only the
+  same two managed-sandbox permission failures. Both affected files pass
+  natively at 48/48 tests and 242 assertions. The aggregate executes 17,006
+  assertions.
+- Exact implementation checkpoint
+  `68f470055f4cd9c0e7e2e6df49af8d37e6a57bd2` has a 3,788,109-byte tracked
+  source archive with SHA-256
+  `0f52baa87e02030772f821df5f8b91d1781a65b8205476d9590dca2ba3d31b5b`.
+  Two independently built 299-entry npm packages are byte-identical at
+  2,494,642 bytes with SHA-256
+  `3c24c5d060907ce04aaef7c64ed7121137926444c2bf4b9710761dd9355efe76`;
+  a fresh 67-package install validates the public API, CLI, and all 79 bundled
+  plugin files.
+- Windows GUI acceptance builds with zero warnings/errors, passes 7/7 core and
+  3/3 shared tests, and passes a verified hidden startup. Its 346,796-byte
+  executable has SHA-256
+  `a8edf3f35c0578e44f00257734961f2a78b5b86b52acc2d417bc2354a34a0939`.
+  Ubuntu/WSL locked restore and build also have zero warnings/errors; 7/7 core,
+  3/3 shared, and 2/2 Linux UI tests pass, followed by non-graphical and real
+  X11/Xvfb startup. The 72,568-byte Linux executable has SHA-256
+  `7e29d642169a6c218c249216c6c10648307aea88faf636b69ac25741104b4adf`.
+- A tracked-only extraction of the exact checkpoint passes deep/xhigh dry-run
+  preflight with three fresh-session attempts, `gpt-5.6-terra`, scanner-owned
+  output, no `GH_TOKEN`, and stored-credential selection. It starts no model
+  runtime and creates no output or persistent scanner-state directory; this is
+  not evidence of a completed or clean self-scan.
+- All 11 hosted workflow families pass at `68f4700`: Node `33358327904`
+  (92/92 jobs), container `33358327915`, Windows GUI `33358327869`, Linux GUI
+  `33358327980`, .NET `33358327884`, Go `33358327909`, Java `33358327893`,
+  Kotlin `33358327887`, PHP `33358327907`, Ruby `33358327900`, and Rust
+  `33358327873`.
 - Closed a measured one-level Flask nested-Blueprint false negative. Before the
   host change, Flask's documented child-to-parent-to-application registration
   shape emitted zero rows while all 20 previous Flask regressions passed with
