@@ -64,6 +64,34 @@ only the two expected managed-sandbox failures; both affected files pass
 natively at 48/48 tests and 242 assertions. The aggregate executes 16,924
 assertions. Package, GUI, hosted, and immutable-checkpoint evidence follows.
 
+**Checkpoint evidence.** Exact implementation checkpoint
+`cc14b5b273630cb908ccbc0e0d04cf4af16a17f2` has a 3,776,498-byte tracked
+archive (SHA-256
+`67d0f615da5b1fb18211edee206b611c460eb9f0dbebfd9f3b9ff5b4cf232f03`).
+Two independent 299-entry npm packages are byte-identical at 2,489,721 bytes
+(SHA-256
+`45ce9207d1003570878adebbbad487b6718818f4fa26d9e474e86defa9135650`).
+A fresh 67-package install validates the public API, CLI, and all 79 bundled
+plugin files. The production dependency audit is clean.
+
+Windows GUI acceptance builds with zero warnings/errors, passes 7/7 core and
+3/3 shared tests, and publishes a 346,796-byte executable (SHA-256
+`065a30a1e86415e641dcf6bb51a67e0bf5c7b8451fc7d94e2c09fb5c8af6a81b`).
+Ubuntu/WSL locked restore and build also have zero warnings/errors; 7/7 core,
+3/3 shared, and 2/2 Linux UI tests pass, as do non-graphical and X11/Xvfb
+startup. The 72,568-byte Linux executable has SHA-256
+`7e29d642169a6c218c249216c6c10648307aea88faf636b69ac25741104b4adf`.
+
+A clean tracked-only clone of the exact implementation SHA passes deep/xhigh
+dry-run preflight with three fresh-session attempts, scanner-owned output,
+`GH_TOKEN` absent, and stored-credential account selection. Preflight starts no
+model runtime and creates no persistent scanner-state directory; this is not
+evidence of a completed scan or a clean self-scan. All 11 hosted workflow
+families pass: Node `33349893432` (92/92 jobs), container `33349893498`,
+Windows GUI `33349893540`, Linux GUI `33349893435`, .NET `33349893445`, Go
+`33349893408`, Java `33349893486`, Kotlin `33349893473`, PHP `33349893412`,
+Ruby `33349893476`, and Rust `33349893405`.
+
 ## 2026-08-30 — Bind Flask Blueprint routes to an exact application mount
 
 **Measured gap and maintained contract.** The unchanged host emitted zero rows
