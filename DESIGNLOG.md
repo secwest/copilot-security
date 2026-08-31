@@ -60,6 +60,35 @@ Types, generated-model drift, build, formatting, the live production dependency
 audit, and both exact-version witnesses pass. Package, GUI, hosted, and
 immutable-checkpoint evidence follows.
 
+**Checkpoint and distribution evidence.** Exact implementation checkpoint
+`dea99c61f16dd691f4a4cf9708306ec616e5b5d8` has a 3,783,103-byte tracked
+source archive (SHA-256
+`9bfc1cc0aead5cd2c76328bab1feac28304612ece8db47581fe17caab7032f77`).
+Two independently built 299-entry npm packages are byte-identical at 2,492,555
+bytes (SHA-256
+`14dbfa4e417bd79c426ee25a59dc319b0c3a666c4476db756ae4a1304c88d4fe`).
+Strict inspection and a fresh 67-package install validate the public API, CLI,
+and all 79 bundled plugin files.
+
+Windows builds with zero warnings/errors, passes 7/7 core and 3/3 shared tests,
+and passes a verified hidden startup. Its 346,796-byte executable has SHA-256
+`248fa766f3a62a2dd82a6ab94e156d91157bcb88b5430c04df56169025a589b8`.
+Ubuntu/WSL locked restore and build also have zero warnings/errors; 7/7 core,
+3/3 shared, and 2/2 Linux UI tests pass, followed by non-graphical and real
+X11/Xvfb startup. Its 72,568-byte self-contained executable has SHA-256
+`7e29d642169a6c218c249216c6c10648307aea88faf636b69ac25741104b4adf`.
+
+A tracked-only extraction of the exact checkpoint passes deep/xhigh dry-run
+preflight with three fresh-session attempts, `gpt-5.6-terra`, scanner-owned
+output, `GH_TOKEN` absent, and stored-credential account selection. The dry run
+starts no model runtime and creates neither its output directory nor persistent
+scanner state; it is not evidence of a completed scan or a clean self-scan.
+All 11 exact-checkpoint workflow families pass: Node `33354547654` (92/92
+jobs), container `33354547649`, Windows GUI `33354547602`, Linux GUI
+`33354547699`, .NET `33354547620`, Go `33354547633`, Java `33354547650`,
+Kotlin `33354547603`, PHP `33354547679`, Ruby `33354547623`, and Rust
+`33354547666`. GitHub reports the repository public with default branch `main`.
+
 ## 2026-08-30 — Resolve Flask Blueprint mounts across application factories
 
 **Measured gap and maintained contract.** The unchanged host emitted zero rows

@@ -33,6 +33,33 @@ All notable scanner, application, benchmark, and operational changes are recorde
   natively at 48/48 tests and 242 assertions. The aggregate executes 16,968
   assertions. Package, GUI, and hosted evidence follows the implementation
   checkpoint.
+- Exact implementation checkpoint
+  `dea99c61f16dd691f4a4cf9708306ec616e5b5d8` has a 3,783,103-byte tracked
+  source archive with SHA-256
+  `9bfc1cc0aead5cd2c76328bab1feac28304612ece8db47581fe17caab7032f77`.
+  Two independent 299-entry npm packages are byte-identical at 2,492,555 bytes
+  with SHA-256
+  `14dbfa4e417bd79c426ee25a59dc319b0c3a666c4476db756ae4a1304c88d4fe`;
+  a fresh 67-package install validates the public API, CLI, and all 79 bundled
+  plugin files.
+- Windows GUI acceptance builds with zero warnings/errors, passes 7/7 core and
+  3/3 shared tests, and passes a verified hidden startup. Its 346,796-byte
+  executable has SHA-256
+  `248fa766f3a62a2dd82a6ab94e156d91157bcb88b5430c04df56169025a589b8`.
+  Ubuntu/WSL locked restore and build also have zero warnings/errors; 7/7 core,
+  3/3 shared, and 2/2 Linux UI tests pass, as do non-graphical and X11/Xvfb
+  startup. The 72,568-byte Linux executable has SHA-256
+  `7e29d642169a6c218c249216c6c10648307aea88faf636b69ac25741104b4adf`.
+- A tracked-only extraction of the exact checkpoint passes deep/xhigh dry-run
+  preflight with three fresh-session attempts, `gpt-5.6-terra`, scanner-owned
+  output, no `GH_TOKEN`, and stored-credential selection. It starts no model
+  runtime and creates no output or persistent scanner-state directory; this is
+  not evidence of a completed or clean self-scan.
+- All 11 hosted workflow families pass at `dea99c6`: Node `33354547654`
+  (92/92 jobs), container `33354547649`, Windows GUI `33354547602`, Linux GUI
+  `33354547699`, .NET `33354547620`, Go `33354547633`, Java `33354547650`,
+  Kotlin `33354547603`, PHP `33354547679`, Ruby `33354547623`, and Rust
+  `33354547666`.
 - Closed a measured Flask application-factory false negative. Before the host
   change, the maintained `create_app` pattern—official Blueprint in one module,
   `from . import redirects`, exact `app.register_blueprint(redirects.bp)`, and
