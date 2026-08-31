@@ -2,6 +2,93 @@
 
 This log records consequential implementation decisions, their evidence, and the tradeoffs that future scanner work must preserve.
 
+## 2026-08-31 — Model Vue Router browser URLs at fetch argument zero
+
+**Measured gap and comparator.** A minimal exact Vue Router 5 application used
+the official `useRoute` result, read `route.query.resource`, and appended that
+browser-controlled value to `/api/profile/` at `fetch` argument zero. The
+unchanged deterministic inventory emitted no row, and the isolated regression
+failed with zero records before the model was added. A no-network WHATWG URL
+witness proves that the synthetic value `../admin/export` removes the profile
+path component and selects `/api/admin/export`. This matches
+[CodeQL 2.26.3](https://codeql.github.com/docs/codeql-overview/codeql-changelog/codeql-cli-2.26.3/),
+which added Vue Router `useRoute` query, parameter, path, full-path, and fragment
+sources to its client-side remote-flow model; the official
+[Vue Router `useRoute` API](https://router.vuejs.org/api/functions/useroute)
+defines that binding as the current route location. CodeQL's
+[client-side request-forgery guidance](https://codeql.github.com/codeql-query-help/javascript/js-client-side-request-forgery/)
+describes the unintended-endpoint and dot-segment boundary as CWE-918.
+
+**Typed decision.** Emit `node-vue-router-client-request-forgery` only when the
+nearest package proves an exact production `vue-router` major 4 or 5 from the
+manifest or a fresh lock graph. Prove an official named or aliased `useRoute`,
+namespace member, TypeScript import-equals, CommonJS destructuring, receiver,
+or direct-member binding; an unchanged call result; and one exact `query` or
+`params` literal field, or the `path`, `fullPath`, or `hash` member. Follow that
+value directly, through one assignment, or through a bounded fixed-string
+concatenation to argument zero of the unchanged built-in `fetch`,
+`window.fetch`, or `globalThis.fetch` in the same enclosing JavaScript
+function. A Vue single-file component is eligible only for one inline
+`<script setup>` block without `src`; adding `.vue` to Node package-source
+lookup does not make templates or arbitrary component text executable input.
+
+**Precision boundary.** A fixed prefix ending in `?` or `#` keeps raw input out
+of the origin and pathname; direct `encodeURIComponent` likewise prevents dot
+segments and URL delimiters from changing the request target. These are
+controls, consistent with CodeQL's maintained
+[request-forgery sanitizer model](https://codeql.github.com/codeql-standard-libraries/javascript/semmle/javascript/security/dataflow/RequestForgeryCustomizations.qll/module.RequestForgeryCustomizations%24RequestForgery.html).
+Opaque call-wrapped transformations fail closed because their semantics cannot
+be proven locally. Vue Router 3, ranges without a fresh exact lock, dev-only or
+unresolved dependencies, test/example files, local lookalikes, rebound
+`useRoute`/route/global/fetch bindings, overwritten route-location or fetch
+members, imported or parameter-shadowed fetch functions, unsupported members,
+top-level non-SFC calls, and values used only in request options or nonzero
+arguments emit no specialized row. This boundary favors an explainable
+high-confidence candidate over regex similarity.
+
+**Reviewer contract.** Reopen and name the exact dependency proof, official
+binding, route member, enclosing execution boundary, and argument-zero browser
+request URL. Reconstruct browser URL resolution and identify the unintended
+endpoint, then check for encoding, a query/fragment boundary, fixed target,
+pathname restriction, or allowlist before accepting CWE-918. Validation and
+attack-path text must preserve those facts. The reviewer may not infer that
+credentials are included, a response is exposed, a state-changing endpoint
+exists, or the application is publicly reachable without separate deployment,
+fetch-option, response-consumer, and target-endpoint evidence.
+
+**Executable evidence.** The pinned Vue Router 5.2.0 pair shares one
+`<script setup>` topology. The positive reaches `/api/admin/export`; the
+control retains `/api/search` and encodes the route query. Both offline
+witnesses pass. Twenty-two focused tests with 48 assertions cover all five
+route source shapes, Vue Router 4 and 5, ESM/namespace/CommonJS bindings,
+literal bracket members, SFC handling, bounded propagation, request-boundary
+controls, model-specific evidence quality, reviewer instructions, and thirteen
+families of rejected shapes. The adjacent typed-model and canonical-corpus
+lane passes 47 tests and 2,958 assertions. The canonical manifest now contains
+207 exploit/control pairs, 414 cases, and 1,242 repeated scan positions.
+
+**Acceptance evidence.** The authoritative suite executes 2,276 tests across
+221 files and 17,387 assertions. In the managed environment 2,243 pass and 31
+intentionally skip; its two unchanged Git-fixture and Windows-home-ACL failures
+pass under native rerun, producing 2,245 logical passes and no product failure.
+Formatting, generated-model drift, TypeScript, clean production build, and the
+production high-severity advisory audit pass. Two 299-entry archives are
+byte-identical at 2,486,535 bytes with SHA-256
+`988a66416d6de0919ed07db728a3f4ed64189bef425a03527dd28cab283a74c8`;
+strict inspection and isolated installation validate 67 production packages,
+public import, the CLI, and all 79 bundled plugin files. Two compiled repository
+inventories are byte-identical at 256 rows and 639,189 bytes with SHA-256
+`9b7c25499fc51ce59e34a31f70edbb8dca73e852d618e1e3c12463aeb13fcf5c`;
+only the intentional Vue exploit emits the model, at source line 5 and sink
+line 6. Windows builds without warnings, passes 7/7 core plus 3/3 shared tests,
+and publishes a 346,796-byte executable with SHA-256
+`9f86e3d6d86a1bda7ef6a6ec961db32c0a095799389e459e812fb62925d57ecf`.
+Native Ubuntu/WSL builds without warnings, passes those suites plus 2/2 headless
+tests, and passes non-graphical and X11/Xvfb startup; its 72,568-byte executable
+has SHA-256
+`7e29d642169a6c218c249216c6c10648307aea88faf636b69ac25741104b4adf`.
+The continuing effectiveness goal remains active.
+
 ## 2026-08-31 — Discard findings whose evidence contradicts repository bytes
 
 **Measured failure.** The live Fastify acceptance scan reviewed the two changed

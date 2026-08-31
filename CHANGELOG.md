@@ -6,6 +6,59 @@ All notable scanner, application, benchmark, and operational changes are recorde
 
 ### Scanner effectiveness
 
+- Closed a measured Vue Router client-side request-forgery false negative. The
+  unchanged scanner emitted no structured row when an exact production
+  `vue-router` application read `route.query.resource` from the official
+  `useRoute` result and appended it to `/api/profile/` at browser `fetch`
+  argument zero. The focused counterexample failed before implementation; its
+  no-network witness proves that `../admin/export` resolves to the unintended
+  same-origin `/api/admin/export` endpoint.
+- Added the bounded `node-vue-router-client-request-forgery` model for exact
+  production Vue Router 4 and 5 dependencies. It proves official named,
+  aliased, namespace, import-equals, or CommonJS `useRoute` provenance; a
+  stable current-route binding; `query`, `params`, `path`, `fullPath`, or
+  `hash` browser-URL input; an enclosing function or one inline Vue
+  `<script setup>` block; and direct, one-assignment, or fixed-concatenation
+  flow into argument zero of the unchanged built-in `fetch`, `window.fetch`,
+  or `globalThis.fetch` boundary. The reviewer contract now requires the same
+  dependency, source, URL-resolution, sink, control, and CWE-918 evidence.
+- Preserved fixed query/fragment boundaries and direct `encodeURIComponent`
+  as request-forgery controls. Vue Router 3, development-only or unresolved
+  dependencies, local lookalikes, rebound APIs or route members, imported or
+  shadowed `fetch`, nonzero/body-only arguments, unsupported members,
+  top-level non-SFC code, tests/examples, and opaque transformations fail
+  closed. Twenty-two focused regressions with 48 assertions cover these
+  positive and negative boundaries; the adjacent model/corpus gate passes 47
+  tests and 2,958 assertions.
+- Added a pinned Vue Router 5.2.0 exploit/control pair, a specialized manifest,
+  and offline URL-resolution witnesses. The fixed twin keeps `/api/search` as
+  the pathname and percent-encodes the route query. Both witnesses pass, and
+  the canonical benchmark advances to 207 pairs, 414 cases, and 1,242 repeated
+  scan positions.
+- The full managed suite exercises 2,276 tests across 221 files and 17,387
+  assertions: 2,243 pass in the managed environment, 31 intentionally skip,
+  and the two unchanged Git-fixture and Windows-home-ACL cases pass when
+  rerun natively, for 2,245 logical passes and no product failure. Repository
+  formatting, generated-model drift, TypeScript, the production build, and
+  the production high-severity dependency audit pass.
+- Two post-change npm archives are byte-identical at 2,486,535 bytes with 299
+  entries and SHA-256
+  `988a66416d6de0919ed07db728a3f4ed64189bef425a03527dd28cab283a74c8`.
+  Strict inspection and an isolated install validate 67 production packages,
+  the public API, executable CLI, and all 79 bundled plugin files.
+- Two compiled whole-repository inventories are byte-identical at 256 rows and
+  639,189 bytes with SHA-256
+  `9b7c25499fc51ce59e34a31f70edbb8dca73e852d618e1e3c12463aeb13fcf5c`.
+  Exactly one new CWE-918 row identifies the intentional Vue fixture at source
+  line 5 and `fetch` sink line 6; the topology-matched encoded control is
+  absent.
+- Windows builds without warnings/errors, passes 7/7 core and 3/3 shared
+  desktop tests, and publishes a 346,796-byte executable with SHA-256
+  `9f86e3d6d86a1bda7ef6a6ec961db32c0a095799389e459e812fb62925d57ecf`.
+  Native Ubuntu/WSL builds without warnings/errors, passes the same suites plus
+  2/2 headless interface checks, and passes non-graphical and X11/Xvfb startup;
+  its 72,568-byte executable has SHA-256
+  `7e29d642169a6c218c249216c6c10648307aea88faf636b69ac25741104b4adf`.
 - Hardened the final evidence boundary after the Fastify live self-scan exposed
   a cross-file sibling inversion. Copilot attributed the vulnerable
   root-prefix expression to the encoded control and attributed the control

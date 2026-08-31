@@ -10345,6 +10345,77 @@
         "node-fastify-safe-local-redirect/run-3/findings.json"
       ],
       "expected": []
+    },
+    {
+      "id": "node-vue-router-client-request-forgery",
+      "description": "A Vue Router query value contributes a traversal segment to fetch argument zero and selects an unintended same-origin endpoint.",
+      "fixture": "fixtures/node-vue-router-client-request-forgery",
+      "findingsPaths": [
+        "node-vue-router-client-request-forgery/run-1/findings.json",
+        "node-vue-router-client-request-forgery/run-2/findings.json",
+        "node-vue-router-client-request-forgery/run-3/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "node-vue-router-client-request-forgery",
+          "cwe": ["CWE-918"],
+          "locations": [
+            {
+              "path": "src/ProfileLoader.vue",
+              "startLine": 6,
+              "endLine": 6,
+              "lineTolerance": 1
+            }
+          ],
+          "acceptableSeverities": ["high", "medium"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true,
+          "requiredValidationTextAnyOf": [
+            ["Vue Router 5", "vue-router@5.2.0", "Vue Router version"],
+            ["useRoute", "current route", "route location"],
+            ["route.query.resource", "route.query", "browser URL query"],
+            ["fetch argument zero", "fetch URL", "request URL"],
+            ["path traversal", "unintended endpoint", "different API endpoint"],
+            ["encodeURIComponent", "fixed endpoint", "pathname restriction"],
+            ["CWE-918", "client-side request forgery"]
+          ],
+          "requiredAttackPathTextAnyOf": [
+            ["Vue Router 5", "vue-router@5.2.0", "useRoute"],
+            ["route.query.resource", "route.query", "browser URL query"],
+            ["/api/profile/", "profile endpoint", "intended endpoint"],
+            ["../admin/export", "path traversal", "dot segment"],
+            ["fetch", "argument zero", "browser request"],
+            [
+              "/api/admin/export",
+              "unintended endpoint",
+              "different API endpoint"
+            ],
+            ["URL resolution only", "no network request", "does not contact"]
+          ],
+          "forbiddenText": [
+            "the witness contacted an endpoint",
+            "proves the application sends credentials",
+            "proves the response is exposed",
+            "proves the endpoint performs a state change",
+            "proves the application is publicly reachable",
+            "every Vue Router query is vulnerable",
+            "every fetch call is vulnerable",
+            "the host is fully compromised"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "node-vue-router-fixed-endpoint-request",
+      "description": "The topology-matched control percent-encodes the same route value as data beneath a fixed request endpoint.",
+      "fixture": "fixtures/node-vue-router-fixed-endpoint-request",
+      "findingsPaths": [
+        "node-vue-router-fixed-endpoint-request/run-1/findings.json",
+        "node-vue-router-fixed-endpoint-request/run-2/findings.json",
+        "node-vue-router-fixed-endpoint-request/run-3/findings.json"
+      ],
+      "expected": []
     }
   ]
 }

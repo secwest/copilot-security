@@ -707,6 +707,10 @@ describe("effectiveness benchmark", () => {
       ["node-express-open-redirect", "node-express-safe-local-redirect"],
       ["node-fastify-open-redirect", "node-fastify-safe-local-redirect"],
       [
+        "node-vue-router-client-request-forgery",
+        "node-vue-router-fixed-endpoint-request",
+      ],
+      [
         "python-flask-post-open-redirect",
         "python-flask-post-safe-local-redirect",
       ],

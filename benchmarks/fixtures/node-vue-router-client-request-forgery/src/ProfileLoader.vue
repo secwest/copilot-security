@@ -1,0 +1,9 @@
+<script setup>
+import { useRoute } from "vue-router";
+
+const route = useRoute();
+const resource = route.query.resource;
+const profilePromise = fetch("/api/profile/" + resource);
+</script>
+
+<template><div data-profile-loader /></template>

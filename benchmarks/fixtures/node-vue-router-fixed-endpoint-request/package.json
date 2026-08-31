@@ -1,0 +1,11 @@
+{
+  "name": "node-vue-router-fixed-endpoint-request",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "witness": "node examples/witness.mjs"
+  },
+  "dependencies": {
+    "vue-router": "5.2.0"
+  }
+}

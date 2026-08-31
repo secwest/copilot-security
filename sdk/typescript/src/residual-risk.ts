@@ -509,6 +509,10 @@ const JAVASCRIPT_EXTENSIONS = new Set([
   ".ts",
   ".tsx",
 ]);
+const NODE_PACKAGE_SOURCE_EXTENSIONS = new Set([
+  ...JAVASCRIPT_EXTENSIONS,
+  ".vue",
+]);
 const PYTHON_EXTENSIONS = new Set([".py"]);
 const JAVA_EXTENSIONS = new Set([".java", ".kt", ".kts"]);
 const JAVA_SOURCE_EXTENSIONS = new Set([".java"]);
@@ -4718,6 +4722,22 @@ const NODE_FASTIFY_OPEN_REDIRECT_FIELD_EVIDENCE_REQUIREMENTS = [
   ["CWE-601", "open redirect", "URL redirection"],
 ] as const;
 
+const NODE_VUE_ROUTER_CLIENT_REQUEST_FORGERY_FIELD_EVIDENCE_REQUIREMENTS = [
+  ["Vue Router 4", "Vue Router 5", "vue-router", "useRoute"],
+  [
+    "route.query",
+    "route.params",
+    "route.path",
+    "route.fullPath",
+    "route.hash",
+    "browser URL",
+  ],
+  ["fetch argument zero", "fetch URL", "browser request URL"],
+  ["path traversal", "URL resolution", "unintended endpoint", "API endpoint"],
+  ["encodeURIComponent", "fixed endpoint", "pathname restriction", "allowlist"],
+  ["CWE-918", "client-side request forgery", "request forgery"],
+] as const;
+
 const NODE_MCP_TOOL_SSRF_FIELD_EVIDENCE_REQUIREMENTS = [
   ["MCP tool", "registerTool", "server.tool", "tool callback"],
   ["tool input", "callback input", "LLM-controlled", "client-controlled"],
@@ -4859,6 +4879,15 @@ const MODEL_SPECIFIC_FINDING_REQUIREMENTS: ReadonlyMap<
     {
       validation: NODE_FASTIFY_OPEN_REDIRECT_FIELD_EVIDENCE_REQUIREMENTS,
       attackPath: NODE_FASTIFY_OPEN_REDIRECT_FIELD_EVIDENCE_REQUIREMENTS,
+    },
+  ],
+  [
+    "node-vue-router-client-request-forgery",
+    {
+      validation:
+        NODE_VUE_ROUTER_CLIENT_REQUEST_FORGERY_FIELD_EVIDENCE_REQUIREMENTS,
+      attackPath:
+        NODE_VUE_ROUTER_CLIENT_REQUEST_FORGERY_FIELD_EVIDENCE_REQUIREMENTS,
     },
   ],
   [
@@ -5198,6 +5227,7 @@ export async function buildResidualRiskInventory(
   records.push(...nodeNextJsDynamicRouteAuthorizationRecords(sourceFiles));
   records.push(...nodeExpressOpenRedirectRecords(sourceFiles));
   records.push(...nodeFastifyOpenRedirectRecords(sourceFiles));
+  records.push(...nodeVueRouterClientRequestForgeryRecords(sourceFiles));
   records.push(...nodePlateMediaEmbedXssRecords(sourceFiles));
   records.push(...nodeDefuddleExtractorXssRecords(sourceFiles));
   records.push(...nodePickemTerminalInjectionRecords(sourceFiles));
@@ -26116,6 +26146,471 @@ function nodeFastifyOpenRedirectRecords(
             if (records.length >= MAX_FRAMEWORK_CROSS_FILE_RECORDS)
               return records;
           }
+        }
+      }
+    }
+  }
+  return records;
+}
+
+interface NodeVueRouterUseRouteBinding {
+  line: number;
+  local: string;
+  member?: "useRoute";
+}
+
+interface NodeVueRouterFunctionScope {
+  endLine: number;
+  parameters: string[];
+  startLine: number;
+}
+
+interface NodeVueRouterRouteBinding {
+  binding: NodeVueRouterUseRouteBinding;
+  line: number;
+  local: string;
+  scope: NodeVueRouterFunctionScope;
+}
+
+function nodeVueRouterFunctionScopes(
+  lines: readonly string[],
+): NodeVueRouterFunctionScope[] {
+  const structural = javascriptStructuralLines(lines);
+  const scopes: NodeVueRouterFunctionScope[] = [];
+  const parameters = (value: string): string[] =>
+    splitJavascriptArguments(value)
+      .map((parameter) =>
+        parameter
+          .trim()
+          .replace(/^\.\.\./u, "")
+          .replace(/\s*=.*$/u, "")
+          .replace(/\??\s*:\s*.*$/u, "")
+          .trim(),
+      )
+      .filter((parameter) => /^[A-Za-z_$][\w$]*$/u.test(parameter));
+  for (let index = 0; index < structural.length; index += 1) {
+    const line = structural[index] ?? "";
+    const declaration =
+      /\b(?:async\s+)?function(?:\s+[A-Za-z_$][\w$]*)?\s*\(([^)]*)\)\s*\{/u.exec(
+        line,
+      ) ??
+      /(?:^|=)\s*(?:async\s*)?\(([^)]*)\)\s*=>\s*\{/u.exec(line) ??
+      /^\s*(?:async\s+)?(?:setup|render|load[A-Za-z0-9_$]*)\s*\(([^)]*)\)\s*\{/u.exec(
+        line,
+      );
+    if (declaration?.[1] === undefined) continue;
+    scopes.push({
+      startLine: index + 1,
+      endLine: javascriptFunctionEndLine(lines, index),
+      parameters: parameters(declaration[1]),
+    });
+  }
+  const scriptSetupStarts = lines
+    .map((line, index) => ({ index, line: javascriptCodeBeforeComment(line) }))
+    .filter(
+      ({ line }) =>
+        /^\s*<script\b(?=[^>]*\bsetup\b)[^>]*>\s*$/iu.test(line) &&
+        !/\bsrc\s*=/iu.test(line),
+    );
+  if (scriptSetupStarts.length === 1) {
+    const start = scriptSetupStarts[0]!.index;
+    const end = lines.findIndex(
+      (line, index) => index > start && /^\s*<\/script\s*>\s*$/iu.test(line),
+    );
+    if (end > start + 1) {
+      scopes.push({ startLine: start + 2, endLine: end, parameters: [] });
+    }
+  }
+  return scopes;
+}
+
+function nodeVueRouterUseRouteBindings(
+  lines: readonly string[],
+): NodeVueRouterUseRouteBinding[] {
+  const bindings: NodeVueRouterUseRouteBinding[] = importedJavascriptSymbols(
+    lines,
+  )
+    .filter(
+      ({ imported, moduleSpecifier }) =>
+        moduleSpecifier === "vue-router" && imported === "useRoute",
+    )
+    .map(({ line, local }) => ({ line, local }));
+  const codeLines = javascriptCodeLinesWithoutComments(lines);
+  for (let index = 0; index < codeLines.length; index += 1) {
+    const code = codeLines[index] ?? "";
+    const namespace =
+      /^\s*import\s+\*\s+as\s+([A-Za-z_$][\w$]*)\s+from\s+["']vue-router["']/u.exec(
+        code,
+      ) ??
+      /^\s*import\s+([A-Za-z_$][\w$]*)\s*=\s*require\s*\(\s*["']vue-router["']\s*\)/u.exec(
+        code,
+      ) ??
+      /^\s*(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*require\s*\(\s*["']vue-router["']\s*\)\s*;?\s*$/u.exec(
+        code,
+      );
+    if (namespace?.[1] !== undefined) {
+      bindings.push({
+        line: index + 1,
+        local: namespace[1],
+        member: "useRoute",
+      });
+    }
+    const direct =
+      /^\s*(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*require\s*\(\s*["']vue-router["']\s*\)\s*\.\s*useRoute\s*;?\s*$/u.exec(
+        code,
+      );
+    if (direct?.[1] !== undefined) {
+      bindings.push({ line: index + 1, local: direct[1] });
+    }
+  }
+  return bindings.filter(
+    (binding, index, all) =>
+      all.findIndex(
+        (candidate) =>
+          candidate.line === binding.line &&
+          candidate.local === binding.local &&
+          candidate.member === binding.member,
+      ) === index,
+  );
+}
+
+function nodeVueRouterBindingPattern(
+  binding: NodeVueRouterUseRouteBinding,
+): string {
+  const local = escapeRegularExpression(binding.local);
+  return binding.member === undefined ? local : `${local}\\s*\\.\\s*useRoute`;
+}
+
+function nodeVueRouterRouteBindings(
+  lines: readonly string[],
+): NodeVueRouterRouteBinding[] {
+  const structural = javascriptStructuralLines(lines);
+  const scopes = nodeVueRouterFunctionScopes(lines);
+  const routes: NodeVueRouterRouteBinding[] = [];
+  for (const binding of nodeVueRouterUseRouteBindings(lines)) {
+    const pattern = nodeVueRouterBindingPattern(binding);
+    for (let index = binding.line; index < structural.length; index += 1) {
+      const declaration = new RegExp(
+        `^\\s*const\\s+([A-Za-z_$][\\w$]*)(?:\\s*:[^=;]+)?\\s*=\\s*${pattern}\\s*\\(\\s*(?:["'][^"']+["'])?\\s*\\)\\s*;?\\s*$`,
+        "u",
+      ).exec(structural[index] ?? "");
+      if (declaration?.[1] === undefined) continue;
+      const line = index + 1;
+      const scope = scopes
+        .filter(
+          (candidate) =>
+            line >= candidate.startLine && line <= candidate.endLine,
+        )
+        .sort((left, right) => right.startLine - left.startLine)[0];
+      if (
+        scope === undefined ||
+        scope.parameters.includes(binding.local) ||
+        javascriptIdentifierReassignedBetween(
+          lines,
+          binding.local,
+          binding.line,
+          line,
+        ) ||
+        (binding.member !== undefined &&
+          structural
+            .slice(binding.line, Math.max(binding.line, line - 1))
+            .some((candidate) =>
+              new RegExp(
+                `\\b${escapeRegularExpression(binding.local)}\\s*\\.\\s*useRoute\\s*(?:[+\\-*/%&|^?]?=(?!=|>)|\\+\\+|--)`,
+                "u",
+              ).test(candidate),
+            ))
+      ) {
+        continue;
+      }
+      routes.push({
+        binding,
+        line,
+        local: declaration[1],
+        scope,
+      });
+    }
+  }
+  return routes.filter(
+    (route, index, all) =>
+      all.findIndex(
+        (candidate) =>
+          candidate.line === route.line && candidate.local === route.local,
+      ) === index,
+  );
+}
+
+function nodeVueRouterSourcePatterns(route: string): FrameworkModelPattern[] {
+  const escaped = escapeRegularExpression(route);
+  const property =
+    "(?:\\.\\s*[A-Za-z_$][\\w$]*|\\[\\s*[\"'][^\"']+[\"']\\s*\\])";
+  const member = (name: string): string =>
+    `(?:\\.\\s*${name}\\b|\\[\\s*[\"']${name}[\"']\\s*\\])`;
+  return [
+    {
+      kind: "vue-router-browser-url-query",
+      expression: new RegExp(
+        `\\b${escaped}\\s*${member("query")}\\s*${property}`,
+        "u",
+      ),
+    },
+    {
+      kind: "vue-router-browser-url-path",
+      expression: new RegExp(
+        `\\b${escaped}\\s*(?:${member("params")}\\s*${property}|${member("path")}|${member("fullPath")})`,
+        "u",
+      ),
+    },
+    {
+      kind: "vue-router-browser-url-fragment",
+      expression: new RegExp(`\\b${escaped}\\s*${member("hash")}`, "u"),
+    },
+  ];
+}
+
+function nodeVueRouterMatchingSources(
+  lines: readonly string[],
+  route: string,
+  patterns: readonly FrameworkModelPattern[],
+): Array<{ kind: string; line: number }> {
+  const matches: Array<{ kind: string; line: number }> = [];
+  const codeLines = javascriptCodeLinesWithoutComments(lines);
+  const routePrefix = new RegExp(
+    `\\b${escapeRegularExpression(route)}\\s*\\[\\s*(["'])(query|params|path|fullPath|hash)\\1\\s*\\]`,
+    "gu",
+  );
+  const literalProperty = /\[\s*(["'])[^"']+\1\s*\]/gu;
+  for (
+    let index = 0;
+    index < codeLines.length && matches.length < 24;
+    index += 1
+  ) {
+    const normalized = (codeLines[index] ?? "")
+      .replace(routePrefix, `${route}.$2`)
+      .replace(literalProperty, ".__literal_property");
+    const structural = javascriptStructuralCode(normalized);
+    const match = patterns.find(({ expression }) =>
+      expression.test(structural),
+    );
+    if (match !== undefined)
+      matches.push({ kind: match.kind, line: index + 1 });
+  }
+  return matches;
+}
+
+function nodeVueRouterBuiltInFetch(
+  lines: readonly string[],
+  scope: NodeVueRouterFunctionScope,
+  sinkLine: number,
+  receiver: "fetch" | "globalThis" | "window",
+): boolean {
+  if (scope.parameters.includes(receiver)) return false;
+  if (
+    importedJavascriptSymbols(lines).some(({ local }) => local === receiver)
+  ) {
+    return false;
+  }
+  const escaped = escapeRegularExpression(receiver);
+  const declarations = new RegExp(
+    `\\b(?:const|let|var|function|class)\\s+${escaped}\\b`,
+    "u",
+  );
+  const beforeSink = javascriptStructuralLines(lines)
+    .slice(0, sinkLine - 1)
+    .join("\n");
+  if (
+    declarations.test(beforeSink) ||
+    new RegExp(`\\bimport\\s+(?:\\*\\s+as\\s+)?${escaped}\\b`, "u").test(
+      beforeSink,
+    )
+  ) {
+    return false;
+  }
+  if (receiver === "fetch") return true;
+  return !new RegExp(
+    `\\b${escaped}\\s*\\.\\s*fetch\\s*(?:[+\\-*/%&|^?]?=(?!=|>)|\\+\\+|--)`,
+    "u",
+  ).test(beforeSink);
+}
+
+function nodeVueRouterUrlBoundarySanitizes(
+  lines: readonly string[],
+  target: string,
+  sinkLine: number,
+): boolean {
+  const resolved = resolvedJavascriptExpression(lines, target, sinkLine).value;
+  if (
+    /\b(?:new\s+)?[A-Za-z_$][\w$]*(?:\s*\.\s*[A-Za-z_$][\w$]*)*\s*\(/u.test(
+      resolved,
+    )
+  ) {
+    return true;
+  }
+  const concatenation = /^\s*(["'])([^"']*)\1\s*\+/u.exec(resolved);
+  if (/[?#]/u.test(concatenation?.[2] ?? "")) return true;
+  const template = /^\s*`([^`$]*)\$\{/u.exec(resolved);
+  return /[?#]/u.test(template?.[1] ?? "");
+}
+
+function nodeVueRouterClientRequestForgeryRecords(
+  files: readonly SourceFileSnapshot[],
+): ResidualRiskRecord[] {
+  const records: ResidualRiskRecord[] = [];
+  const emitted = new Set<string>();
+  const fetchCallees = [
+    { receiver: "fetch" as const, expression: /(?<![.$\w])fetch\s*\(/u },
+    {
+      receiver: "window" as const,
+      expression: /\bwindow\s*\.\s*fetch\s*\(/u,
+    },
+    {
+      receiver: "globalThis" as const,
+      expression: /\bglobalThis\s*\.\s*fetch\s*\(/u,
+    },
+  ];
+  for (const file of files) {
+    if (
+      (!JAVASCRIPT_EXTENSIONS.has(file.extension) &&
+        file.extension !== ".vue") ||
+      javascriptTestOrExamplePath(file.path)
+    ) {
+      continue;
+    }
+    const dependency = nodeRuntimeDependency(files, file.path, "vue-router");
+    const major = Number(dependency?.version.split(".")[0]);
+    if (dependency === undefined || (major !== 4 && major !== 5)) continue;
+    const structural = javascriptStructuralLines(file.lines).join("\n");
+    for (const route of nodeVueRouterRouteBindings(file.lines)) {
+      const sourcePatterns = nodeVueRouterSourcePatterns(route.local);
+      const sources = nodeVueRouterMatchingSources(
+        file.lines,
+        route.local,
+        sourcePatterns,
+      ).filter(({ line }) => line >= route.line && line <= route.scope.endLine);
+      if (sources.length === 0) continue;
+      for (const fetchCallee of fetchCallees) {
+        for (const call of javascriptCallsInText(
+          file.text,
+          structural,
+          1,
+          fetchCallee.expression,
+        )) {
+          const target = call.arguments[0]?.trim();
+          const escapedRoute = escapeRegularExpression(route.local);
+          const routeLocationReplacement = new RegExp(
+            `\\b${escapedRoute}\\s*(?:\\.\\s*(?:query|params|path|fullPath|hash)|\\[\\s*["'](?:query|params|path|fullPath|hash)["']\\s*\\])\\s*(?:[+\\-*/%&|^?]?=(?!=|>)|\\+\\+|--)`,
+            "u",
+          );
+          if (
+            target === undefined ||
+            target === "" ||
+            call.line <= route.line ||
+            call.line > route.scope.endLine ||
+            javascriptIdentifierReassignedBetween(
+              file.lines,
+              route.local,
+              route.line,
+              call.line,
+            ) ||
+            javascriptStructuralLines(file.lines)
+              .slice(route.line, call.line - 1)
+              .some((line) => routeLocationReplacement.test(line)) ||
+            !nodeVueRouterBuiltInFetch(
+              file.lines,
+              route.scope,
+              call.line,
+              fetchCallee.receiver,
+            ) ||
+            nodeVueRouterUrlBoundarySanitizes(file.lines, target, call.line)
+          ) {
+            continue;
+          }
+          const source = nodeExpressModeledRedirectSource(
+            file.lines,
+            sources,
+            call.line,
+            target,
+            sourcePatterns,
+          );
+          if (source === undefined) continue;
+          const key = `${file.path}\0${source.line}\0${call.line}`;
+          if (emitted.has(key)) continue;
+          emitted.add(key);
+          const startLine = Math.max(1, call.line - CONTEXT_LINES_BEFORE);
+          const endLine = Math.min(
+            file.lines.length,
+            call.line + CONTEXT_LINES_AFTER,
+          );
+          records.push({
+            path: file.path,
+            line: call.line,
+            categories: [
+              "framework-dataflow:node-vue-router-client-request-forgery",
+              `modeled-source:${source.kind}`,
+              "modeled-sink:browser-fetch-request-url",
+            ],
+            priority: 113,
+            startLine,
+            endLine,
+            excerpt: sourceExcerpt(file.lines, startLine, endLine),
+            sourceExcerpt: sourceExcerpt(
+              file.lines,
+              Math.max(1, source.line - 1),
+              Math.min(file.lines.length, source.line + 1),
+            ),
+            frameworkModel: {
+              schemaVersion: "1.2",
+              id: "node-vue-router-client-request-forgery",
+              language: "javascript-typescript",
+              scope: "same-file",
+              source: {
+                kind: source.kind,
+                path: file.path,
+                line: source.line,
+              },
+              sink: {
+                kind: "browser-fetch-request-url",
+                path: file.path,
+                line: call.line,
+                cweIds: ["CWE-918"],
+              },
+              propagators: [
+                {
+                  kind: "vue-router-use-route-binding",
+                  path: file.path,
+                  line: route.binding.line,
+                  symbol: nodeVueRouterBindingPattern(route.binding).replaceAll(
+                    "\\s*",
+                    "",
+                  ),
+                },
+                {
+                  kind: "vue-router-current-route-location",
+                  path: file.path,
+                  line: route.line,
+                  symbol: route.local,
+                },
+                {
+                  kind: "browser-fetch-argument-zero",
+                  path: file.path,
+                  line: call.line,
+                  symbol:
+                    fetchCallee.receiver === "fetch"
+                      ? "fetch"
+                      : `${fetchCallee.receiver}.fetch`,
+                },
+                {
+                  kind: "vue-router-runtime-dependency",
+                  path: dependency.manifestPath,
+                  line: dependency.line,
+                  symbol: `vue-router@${dependency.version}:${dependency.proof}`,
+                },
+              ],
+              candidateControls: [],
+            },
+          });
+          if (records.length >= MAX_FRAMEWORK_CROSS_FILE_RECORDS)
+            return records;
         }
       }
     }
@@ -56720,7 +57215,7 @@ async function nearestNodePackageMetadataSnapshots(
   let totalBytes = 0;
   sourceFiles: for (const file of files) {
     if (
-      (!JAVASCRIPT_EXTENSIONS.has(file.extension) &&
+      (!NODE_PACKAGE_SOURCE_EXTENSIONS.has(file.extension) &&
         posix.basename(file.path) !== "nx.json" &&
         !nodeNxCiPath(file.path)) ||
       selected.size >= MAX_NODE_PACKAGE_MANIFESTS
