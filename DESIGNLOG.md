@@ -43,11 +43,40 @@ perfect-gate manifest requires the route, query source, polarity, immutable
 tuple, Location boundary, fallback, and CWE-601 while forbidding claims that
 negative membership or mutable, dynamic, or rebound policy is protective.
 
-**Initial acceptance.** Focused Flask, canonical-manifest, and Rust bookkeeping
+**Acceptance evidence.** Focused Flask, canonical-manifest, and Rust bookkeeping
 acceptance passes 64 tests and 3,137 assertions. The canonical corpus advances
-to 202 exploit/control pairs, 404 cases, and 1,212 repeated scan positions.
-Full distribution, GUI, Linux, hosted, and immutable-checkpoint evidence will
-be appended after that closure is complete.
+to 202 exploit/control pairs, 404 cases, and 1,212 repeated scan positions. The
+complete local suite runs 2,189 tests across 218 files: 2,156 pass, 31 are
+intentional platform or integration skips, and only the established two
+managed-sandbox permission checks fail. Their unchanged native rerun passes
+48/48 tests and 242 assertions. The aggregate executes 17,107 assertions.
+Generated-model drift, TypeScript, build, formatting, both exact-version
+witnesses, and the live production dependency audit are clean.
+
+**Distribution and GUI evidence.** Two independent 299-entry packages are
+byte-identical at 2,462,770 bytes with SHA-256
+`6f317e42744cbf63234e8a241559fec951885ca8684a0c8e9de2ff7330cf6d0a`.
+A disposable 67-package installation validates the public API, CLI, and all 79
+bundled plugin files. Windows builds with zero warnings or errors, passes 7/7
+core and 3/3 shared tests, and reaches the hidden idle UI loop twice under
+harness control. Its 346,796-byte executable has SHA-256
+`31a6eabdb82d6aa37f08038a45597a7860724800f4c2a832000432819bffea4d`.
+Ubuntu/WSL locked restore and build have zero warnings or errors; 7/7 core, 3/3
+shared, and 2/2 Linux UI tests pass, followed by the non-graphical smoke test
+and an X11/Xvfb UI startup. Its 72,568-byte self-contained executable has
+SHA-256
+`7e29d642169a6c218c249216c6c10648307aea88faf636b69ac25741104b4adf`.
+All disposable package, publish, and Linux trees are removed after inspection.
+
+**Hosted and immutable closure.** Exact implementation commit
+`56e1753a98ab9491c7f786fe5476bb8596885b93` produces a 3,799,444-byte tracked
+source archive with SHA-256
+`5cce40e4562a29242c4a1846776c53d3bdfc57c9fde5eefcd2b67c44faebd0ca`;
+the disposable archive is removed after hashing. All 11 hosted workflow
+families pass on their first attempt: Node `33372117244` (92/92 jobs),
+container `33372117185`, Windows GUI `33372117205`, Linux GUI `33372117207`,
+.NET `33372117174`, Go `33372117258`, Java `33372117189`, Kotlin
+`33372117214`, PHP `33372117176`, Ruby `33372117216`, and Rust `33372117177`.
 
 ## 2026-08-30 — Bound cross-file nested Blueprint reachability
 

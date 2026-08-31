@@ -25,8 +25,34 @@ All notable scanner, application, benchmark, and operational changes are recorde
   immutable policy, source, sink, fallback, and CWE-601 evidence. The canonical
   corpus advances to 202 pairs, 404 cases, and 1,212 repeated scan positions.
 - Focused Flask, canonical, and Rust bookkeeping acceptance passes 64 tests
-  with 3,137 assertions. Full local, package, GUI, Linux, hosted, and immutable
-  checkpoint evidence follows in a separate acceptance entry.
+  with 3,137 assertions. Full local acceptance runs 2,189 tests across 218
+  files: 2,156 pass, 31 intentional platform/integration skips, and only the
+  established two managed-sandbox permission failures. Both affected files
+  pass natively at 48/48 tests and 242 assertions. The aggregate executes
+  17,107 assertions. Generated models, TypeScript, build, formatting, both
+  witnesses, and the live production audit are clean.
+- Two independently built 299-entry npm packages are byte-identical at
+  2,462,770 bytes with SHA-256
+  `6f317e42744cbf63234e8a241559fec951885ca8684a0c8e9de2ff7330cf6d0a`;
+  a fresh 67-package install validates the public API, CLI, and all 79 bundled
+  plugin files.
+- Windows builds with zero warnings/errors and passes 7/7 core and 3/3 shared
+  tests. Two hidden startup checks reach the idle UI loop and terminate under
+  harness control; the 346,796-byte executable has SHA-256
+  `31a6eabdb82d6aa37f08038a45597a7860724800f4c2a832000432819bffea4d`.
+  Ubuntu/WSL locked restore and build also have zero warnings/errors; 7/7 core,
+  3/3 shared, and 2/2 Linux UI tests pass, followed by non-graphical and real
+  X11/Xvfb startup. The 72,568-byte Linux executable has SHA-256
+  `7e29d642169a6c218c249216c6c10648307aea88faf636b69ac25741104b4adf`.
+- Exact implementation checkpoint
+  `56e1753a98ab9491c7f786fe5476bb8596885b93` has a 3,799,444-byte tracked
+  source archive with SHA-256
+  `5cce40e4562a29242c4a1846776c53d3bdfc57c9fde5eefcd2b67c44faebd0ca`.
+  All 11 hosted workflow families pass on the first attempt: Node
+  `33372117244` (92/92 jobs), container `33372117185`, Windows GUI
+  `33372117205`, Linux GUI `33372117207`, .NET `33372117174`, Go
+  `33372117258`, Java `33372117189`, Kotlin `33372117214`, PHP `33372117176`,
+  Ruby `33372117216`, and Rust `33372117177`.
 - Closed two measured cross-file Flask nested-Blueprint false negatives. A
   child imported into a parent Blueprint and mounted either on a same-file
   application or through a second relative import into `create_app` emitted no
