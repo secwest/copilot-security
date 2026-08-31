@@ -6,6 +6,31 @@ unverifiable alert aggregator. It is a living engineering backlog, not a claim
 that dissimilar products can be reduced to one score.
 
 The latest comparator adoption starts from CodeQL's maintained
+[`js/server-side-unvalidated-url-redirection`](https://codeql.github.com/codeql-query-help/javascript/js-server-side-unvalidated-url-redirection/)
+boundary and its
+[`js/incomplete-url-substring-sanitization`](https://codeql.github.com/codeql-query-help/javascript/js-incomplete-url-substring-sanitization/)
+Express example. Copilot Security requires exact Express 4/5 production
+provenance, an official application or Router binding, literal route
+registration, handler/request/response identity, remote request-field
+provenance, and an exact `res.redirect` Location boundary. Query, route
+parameter, and body sources are separate; body evidence additionally requires
+an official parser registered before the route on the same instance. Express
+4's destination-first and Express 5's status-first redirect forms are modeled
+without treating arbitrary methods named `redirect` as sinks.
+
+The model tightens destination controls beyond substring or prefix folklore.
+A single leading slash remains reportable because a scheme-relative hostile
+value produces `//attacker.invalid/path`; fixed non-root local prefixes and
+complete fixed authorities are controls. A local Set allowlist closes the path
+only with immutable fixed local members and a directly dominating rejecting
+guard. Substring `.includes()` checks, mutated sets, dynamic routes, rebound or
+overwritten framework state, missing or late body parsers, unresolved/dev-only
+dependencies, and opaque transforms do not manufacture safety. A pinned
+Express 5.2.1 exploit/control pair proves the Location differential without
+network I/O, while focused tests retain Express 4, ESM/CommonJS, Router,
+overload, binding, parser-order, and version boundaries.
+
+The preceding comparator adoption starts from CodeQL's maintained
 [`py/url-redirection` query](https://codeql.github.com/codeql-query-help/python/py-url-redirection/)
 and its Django and Flask examples, but tightens one current sanitizer
 assumption and adds framework-registration proof. CodeQL's

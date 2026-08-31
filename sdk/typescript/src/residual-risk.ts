@@ -4684,6 +4684,23 @@ const PYTHON_DJANGO_OPEN_REDIRECT_FIELD_EVIDENCE_REQUIREMENTS = [
   ["CWE-601", "open redirect", "URL redirection"],
 ] as const;
 
+const NODE_EXPRESS_OPEN_REDIRECT_FIELD_EVIDENCE_REQUIREMENTS = [
+  ["Express", "express application", "Router", "registered route"],
+  [
+    "request.query",
+    "request.params",
+    "request.body",
+    "query string",
+    "route parameter",
+    "request body",
+    "remote input",
+  ],
+  ["response.redirect", "Location header", "redirect location"],
+  ["absolute URL", "origin", "scheme-relative", "attacker-selected host"],
+  ["root-only prefix", "fixed local prefix", "exact allowlist", "same-origin"],
+  ["CWE-601", "open redirect", "URL redirection"],
+] as const;
+
 const NODE_MCP_TOOL_SSRF_FIELD_EVIDENCE_REQUIREMENTS = [
   ["MCP tool", "registerTool", "server.tool", "tool callback"],
   ["tool input", "callback input", "LLM-controlled", "client-controlled"],
@@ -4811,6 +4828,13 @@ const MODEL_SPECIFIC_FINDING_REQUIREMENTS: ReadonlyMap<
     {
       validation: PYTHON_DJANGO_OPEN_REDIRECT_FIELD_EVIDENCE_REQUIREMENTS,
       attackPath: PYTHON_DJANGO_OPEN_REDIRECT_FIELD_EVIDENCE_REQUIREMENTS,
+    },
+  ],
+  [
+    "node-express-open-redirect",
+    {
+      validation: NODE_EXPRESS_OPEN_REDIRECT_FIELD_EVIDENCE_REQUIREMENTS,
+      attackPath: NODE_EXPRESS_OPEN_REDIRECT_FIELD_EVIDENCE_REQUIREMENTS,
     },
   ],
   [
@@ -5148,6 +5172,7 @@ export async function buildResidualRiskInventory(
   records.push(...pythonChainlitMcpStdioCommandInjectionRecords(sourceFiles));
   records.push(...nodeContentfulMcpManagementTokenLeakRecords(sourceFiles));
   records.push(...nodeNextJsDynamicRouteAuthorizationRecords(sourceFiles));
+  records.push(...nodeExpressOpenRedirectRecords(sourceFiles));
   records.push(...nodePlateMediaEmbedXssRecords(sourceFiles));
   records.push(...nodeDefuddleExtractorXssRecords(sourceFiles));
   records.push(...nodePickemTerminalInjectionRecords(sourceFiles));
@@ -24924,6 +24949,755 @@ function nodeNextJsDynamicRouteAuthorizationRecords(
         },
       });
       if (records.length >= MAX_FRAMEWORK_CROSS_FILE_RECORDS) return records;
+    }
+  }
+  return records;
+}
+
+interface NodeExpressFactoryBinding {
+  line: number;
+  local: string;
+}
+
+interface NodeExpressInstanceBinding {
+  factoryLine: number;
+  kind: "application" | "router";
+  line: number;
+  local: string;
+}
+
+interface NodeExpressHandlerScope {
+  endLine: number;
+  request: string;
+  response: string;
+  startLine: number;
+  symbol?: string;
+}
+
+function nodeExpressFactoryBindings(
+  lines: readonly string[],
+): NodeExpressFactoryBinding[] {
+  const bindings: NodeExpressFactoryBinding[] = [];
+  for (let index = 0; index < lines.length; index += 1) {
+    const code = javascriptCodeBeforeComment(lines[index] ?? "");
+    const defaultImport =
+      /^\s*import\s+([A-Za-z_$][\w$]*)\s+from\s+["']express["']/u.exec(code);
+    const namespaceImport =
+      /^\s*import\s+\*\s+as\s+([A-Za-z_$][\w$]*)\s+from\s+["']express["']/u.exec(
+        code,
+      );
+    const importEquals =
+      /^\s*import\s+([A-Za-z_$][\w$]*)\s*=\s*require\s*\(\s*["']express["']\s*\)/u.exec(
+        code,
+      );
+    const requireBinding =
+      /^\s*const\s+([A-Za-z_$][\w$]*)\s*=\s*require\s*\(\s*["']express["']\s*\)\s*;?\s*$/u.exec(
+        code,
+      );
+    const local =
+      defaultImport?.[1] ??
+      namespaceImport?.[1] ??
+      importEquals?.[1] ??
+      requireBinding?.[1];
+    if (local !== undefined) bindings.push({ line: index + 1, local });
+  }
+  return bindings;
+}
+
+function nodeExpressInstanceBindings(
+  lines: readonly string[],
+): NodeExpressInstanceBinding[] {
+  const factories = nodeExpressFactoryBindings(lines);
+  const routerImports = importedJavascriptSymbols(lines).filter(
+    (binding) =>
+      binding.moduleSpecifier === "express" && binding.imported === "Router",
+  );
+  const bindings: NodeExpressInstanceBinding[] = [];
+  for (let index = 0; index < lines.length; index += 1) {
+    const code = javascriptCodeBeforeComment(lines[index] ?? "");
+    const directApplication =
+      /^\s*const\s+([A-Za-z_$][\w$]*)\s*=\s*require\s*\(\s*["']express["']\s*\)\s*\(\s*\)\s*;?\s*$/u.exec(
+        code,
+      );
+    if (directApplication?.[1] !== undefined) {
+      bindings.push({
+        factoryLine: index + 1,
+        kind: "application",
+        line: index + 1,
+        local: directApplication[1],
+      });
+      continue;
+    }
+    const directRouter =
+      /^\s*const\s+([A-Za-z_$][\w$]*)\s*=\s*require\s*\(\s*["']express["']\s*\)\s*\.\s*Router\s*\(\s*\)\s*;?\s*$/u.exec(
+        code,
+      );
+    if (directRouter?.[1] !== undefined) {
+      bindings.push({
+        factoryLine: index + 1,
+        kind: "router",
+        line: index + 1,
+        local: directRouter[1],
+      });
+      continue;
+    }
+    for (const factory of factories) {
+      if (
+        factory.line >= index + 1 ||
+        javascriptIdentifierReassignedBetween(
+          lines,
+          factory.local,
+          factory.line,
+          index + 1,
+        )
+      ) {
+        continue;
+      }
+      const escapedFactory = escapeRegularExpression(factory.local);
+      const application = new RegExp(
+        `^\\s*const\\s+([A-Za-z_$][\\w$]*)\\s*=\\s*${escapedFactory}\\s*\\(\\s*\\)\\s*;?\\s*$`,
+        "u",
+      ).exec(code);
+      const router = new RegExp(
+        `^\\s*const\\s+([A-Za-z_$][\\w$]*)\\s*=\\s*${escapedFactory}\\s*\\.\\s*Router\\s*\\(\\s*\\)\\s*;?\\s*$`,
+        "u",
+      ).exec(code);
+      const local = application?.[1] ?? router?.[1];
+      if (local === undefined) continue;
+      bindings.push({
+        factoryLine: factory.line,
+        kind: application === null ? "router" : "application",
+        line: index + 1,
+        local,
+      });
+    }
+    for (const routerImport of routerImports) {
+      if (routerImport.line >= index + 1) continue;
+      const router = new RegExp(
+        `^\\s*const\\s+([A-Za-z_$][\\w$]*)\\s*=\\s*${escapeRegularExpression(routerImport.local)}\\s*\\(\\s*\\)\\s*;?\\s*$`,
+        "u",
+      ).exec(code);
+      if (router?.[1] === undefined) continue;
+      if (
+        javascriptIdentifierReassignedBetween(
+          lines,
+          routerImport.local,
+          routerImport.line,
+          index + 1,
+        )
+      ) {
+        continue;
+      }
+      bindings.push({
+        factoryLine: routerImport.line,
+        kind: "router",
+        line: index + 1,
+        local: router[1],
+      });
+    }
+  }
+  return bindings.filter(
+    (binding, index, all) =>
+      all.findIndex(
+        (candidate) =>
+          candidate.local === binding.local && candidate.line === binding.line,
+      ) === index,
+  );
+}
+
+function nodeExpressHandlerParameters(
+  value: string,
+): { request: string; response: string } | undefined {
+  const arrow =
+    /^(?:async\s+)?\(\s*([A-Za-z_$][\w$]*)[^,]*,\s*([A-Za-z_$][\w$]*)[^)]*\)\s*(?::[^=]+)?=>/su.exec(
+      value.trim(),
+    );
+  const functionExpression =
+    /^(?:async\s+)?function(?:\s+[A-Za-z_$][\w$]*)?\s*\(\s*([A-Za-z_$][\w$]*)[^,]*,\s*([A-Za-z_$][\w$]*)[^)]*\)/su.exec(
+      value.trim(),
+    );
+  const match = arrow ?? functionExpression;
+  if (match?.[1] === undefined || match[2] === undefined) return undefined;
+  return { request: match[1], response: match[2] };
+}
+
+function nodeExpressNamedHandler(
+  lines: readonly string[],
+  symbol: string,
+  routeLine: number,
+): NodeExpressHandlerScope | undefined {
+  const escaped = escapeRegularExpression(symbol);
+  for (let index = 0; index < lines.length; index += 1) {
+    const original = javascriptCodeLinesWithoutComments(
+      lines.slice(index, Math.min(lines.length, index + 8)),
+    ).join("\n");
+    const functionDeclaration = new RegExp(
+      `^\\s*(?:async\\s+)?function\\s+${escaped}\\s*\\(`,
+      "u",
+    );
+    const arrowDeclaration = new RegExp(
+      `^\\s*const\\s+${escaped}(?:\\s*:[^=]+)?\\s*=\\s*(?:async\\s+)?\\(`,
+      "u",
+    );
+    const isFunctionDeclaration = functionDeclaration.test(original);
+    const isArrowDeclaration = arrowDeclaration.test(original);
+    if (!isFunctionDeclaration && !isArrowDeclaration) {
+      continue;
+    }
+    if (isArrowDeclaration && index + 1 >= routeLine) {
+      continue;
+    }
+    const signature = original.replace(
+      new RegExp(`^\\s*const\\s+${escaped}(?:\\s*:[^=]+)?\\s*=\\s*`, "u"),
+      "",
+    );
+    const parameters = nodeExpressHandlerParameters(signature);
+    if (parameters === undefined) continue;
+    return {
+      ...parameters,
+      endLine: javascriptFunctionEndLine(lines, index),
+      startLine: index + 1,
+      symbol,
+    };
+  }
+  return undefined;
+}
+
+function nodeExpressBodyParserLine(
+  lines: readonly string[],
+  receiver: string,
+  factories: readonly NodeExpressFactoryBinding[],
+  afterLine: number,
+  beforeLine: number,
+): number | undefined {
+  const escapedReceiver = escapeRegularExpression(receiver);
+  for (
+    let index = 0;
+    index < Math.min(lines.length, beforeLine - 1);
+    index += 1
+  ) {
+    if (index + 1 <= afterLine) continue;
+    const structural = javascriptStructuralCode(lines[index] ?? "");
+    for (const factory of factories) {
+      if (factory.line > index + 1) continue;
+      const escapedFactory = escapeRegularExpression(factory.local);
+      if (
+        javascriptIdentifierReassignedBetween(
+          lines,
+          factory.local,
+          factory.line,
+          index + 1,
+        ) ||
+        lines
+          .slice(factory.line, index)
+          .some((line) =>
+            new RegExp(
+              `\\b${escapedFactory}\\s*\\.\\s*(?:json|urlencoded)\\s*=`,
+              "u",
+            ).test(javascriptCodeBeforeComment(line)),
+          )
+      ) {
+        continue;
+      }
+      const expression = new RegExp(
+        `\\b${escapedReceiver}\\s*\\.\\s*use\\s*\\(\\s*${escapedFactory}\\s*\\.\\s*(?:json|urlencoded)\\s*\\(`,
+        "u",
+      );
+      if (expression.test(structural)) return index + 1;
+    }
+  }
+  return undefined;
+}
+
+function nodeExpressSourcePatterns(
+  request: string,
+  bodyEnabled: boolean,
+): FrameworkModelPattern[] {
+  const escaped = escapeRegularExpression(request);
+  const property =
+    "(?:\\.\\s*[A-Za-z_$][\\w$]*|\\[\\s*[\"'][^\"']+[\"']\\s*\\])";
+  const patterns: FrameworkModelPattern[] = [
+    {
+      kind: "express-request-query-string",
+      expression: new RegExp(
+        `\\b${escaped}\\s*\\.\\s*query\\s*${property}`,
+        "u",
+      ),
+    },
+    {
+      kind: "express-request-route-parameter",
+      expression: new RegExp(
+        `\\b${escaped}\\s*\\.\\s*params\\s*${property}`,
+        "u",
+      ),
+    },
+  ];
+  if (bodyEnabled) {
+    patterns.push({
+      kind: "express-request-body-field",
+      expression: new RegExp(
+        `\\b${escaped}\\s*\\.\\s*body\\s*${property}`,
+        "u",
+      ),
+    });
+  }
+  return patterns;
+}
+
+function nodeExpressRedirectTarget(
+  arguments_: readonly string[],
+  majorVersion: number,
+): string | undefined {
+  if (arguments_.length === 1) return arguments_[0]?.trim();
+  if (arguments_.length !== 2) return undefined;
+  if (/^[1-5]\d\d$/u.test(arguments_[0]?.trim() ?? "")) {
+    return arguments_[1]?.trim();
+  }
+  if (majorVersion === 4 && /^[1-5]\d\d$/u.test(arguments_[1]?.trim() ?? "")) {
+    return arguments_[0]?.trim();
+  }
+  return undefined;
+}
+
+function nodeExpressFixedDestinationPrefix(
+  lines: readonly string[],
+  argument: string,
+  sinkLine: number,
+): boolean {
+  const resolved = resolvedJavascriptExpression(
+    lines,
+    argument,
+    sinkLine,
+  ).value;
+  const concatenation = /^\s*(["'])(\/[^/][^"']*)\1\s*\+/u.exec(resolved);
+  if (concatenation?.[2] !== undefined) return true;
+  const fixedAuthority =
+    /^\s*(["'])((?:https?:)?\/\/[^/?#"']+\/[^"']*)\1\s*\+/u.exec(resolved);
+  if (fixedAuthority?.[2] !== undefined) return true;
+  const template = /^\s*`(\/[^/][^`]*)\$\{/u.exec(resolved);
+  if (template?.[1] !== undefined) return true;
+  return /^\s*`(?:https?:)?\/\/[^/?#`]+\/[^`]*\$\{/u.test(resolved);
+}
+
+function nodeExpressBindingAssignedInText(
+  value: string,
+  identifier: string,
+): boolean {
+  const escaped = escapeRegularExpression(identifier);
+  return new RegExp(
+    `(?:\\b${escaped}\\s*(?:[+\\-*/%&|^?]=|=(?!=|>)|\\+\\+|--)|(?:\\+\\+|--)\\s*${escaped}\\b|\\b(?:const|let|var)\\s+${escaped}\\b)`,
+    "u",
+  ).test(value);
+}
+
+function nodeExpressModeledRedirectSource(
+  lines: readonly string[],
+  sources: readonly { kind: string; line: number }[],
+  sinkLine: number,
+  argument: string,
+  sourcePatterns: readonly FrameworkModelPattern[],
+): { kind: string; line: number } | undefined {
+  const direct = modeledCallSource(
+    lines,
+    sources,
+    sinkLine,
+    argument,
+    sourcePatterns,
+  );
+  if (direct !== undefined) return direct;
+  const fixedConcatenation =
+    /^\s*(?:(?:["'][^"']*["'])\s*\+\s*)?([A-Za-z_$][\w$]*)(?:\s*\+\s*(?:["'][^"']*["']))?\s*$/u.exec(
+      argument,
+    );
+  if (fixedConcatenation?.[1] === undefined || !argument.includes("+")) {
+    return undefined;
+  }
+  return modeledCallSource(
+    lines,
+    sources,
+    sinkLine,
+    fixedConcatenation[1],
+    sourcePatterns,
+  );
+}
+
+function nodeExpressFailClosedLocalAllowlist(
+  lines: readonly string[],
+  argument: string,
+  sourceLine: number,
+  sinkLine: number,
+): { kind: string; line: number } | undefined {
+  if (!/^[A-Za-z_$][\w$]*$/u.test(argument)) return undefined;
+  const escapedArgument = escapeRegularExpression(argument);
+  const structural = javascriptStructuralLines(
+    lines.slice(sourceLine, sinkLine - 1),
+  ).join("\n");
+  const guard = new RegExp(
+    `\\bif\\s*\\(\\s*!\\s*([A-Z][A-Z0-9_]*)\\s*\\.\\s*has\\s*\\(\\s*${escapedArgument}\\s*\\)\\s*\\)\\s*(?:\\{\\s*(?:return|throw)\\b[\\s\\S]{0,240}?\\}|(?:return|throw)\\b)`,
+    "u",
+  ).exec(structural);
+  if (guard?.[1] === undefined) return undefined;
+  const allowlist = guard[1];
+  const initializer = javascriptVariableInitializer(
+    lines,
+    allowlist,
+    sourceLine,
+  );
+  if (initializer === undefined) return undefined;
+  const set = /^\s*new\s+Set\s*\(\s*(\[[\s\S]*\])\s*\)\s*$/u.exec(
+    initializer.value,
+  );
+  if (set?.[1] === undefined) return undefined;
+  const entries = javascriptArrayEntries({
+    line: initializer.line,
+    value: set[1],
+  });
+  if (
+    entries.length < 2 ||
+    entries.some(({ value }) => {
+      const literal = nodeStaticString(value);
+      return (
+        literal === undefined ||
+        !literal.startsWith("/") ||
+        literal.startsWith("//")
+      );
+    })
+  ) {
+    return undefined;
+  }
+  const allowlistMutation = new RegExp(
+    `\\b${escapeRegularExpression(allowlist)}\\s*\\.\\s*(?:add|clear|delete)\\s*\\(`,
+    "u",
+  );
+  if (
+    javascriptIdentifierReassignedBetween(
+      lines,
+      allowlist,
+      initializer.line,
+      sinkLine,
+    ) ||
+    javascriptStructuralLines(lines.slice(initializer.line, sinkLine - 1)).some(
+      (line) => allowlistMutation.test(line),
+    )
+  ) {
+    return undefined;
+  }
+  const guardOffset =
+    structural.slice(0, guard.index).match(/\n/gu)?.length ?? 0;
+  return {
+    kind: "fail-closed-local-redirect-allowlist",
+    line: sourceLine + 1 + guardOffset,
+  };
+}
+
+function nodeExpressCandidateControls(
+  lines: readonly string[],
+  sourceLine: number,
+  sinkLine: number,
+  argument: string,
+): Array<{ kind: string; path: string; line: number }> {
+  const controls: Array<{ kind: string; path: string; line: number }> = [];
+  const escapedArgument = /^[A-Za-z_$][\w$]*$/u.test(argument)
+    ? escapeRegularExpression(argument)
+    : undefined;
+  for (let line = sourceLine; line <= sinkLine; line += 1) {
+    const structural = javascriptStructuralCode(lines[line - 1] ?? "");
+    if (
+      escapedArgument !== undefined &&
+      new RegExp(`\\b${escapedArgument}\\s*\\.\\s*includes\\s*\\(`, "u").test(
+        structural,
+      )
+    ) {
+      controls.push({ kind: "incomplete-url-substring-check", path: "", line });
+    } else if (/\b(?:URL|url\.parse)\s*\(/u.test(structural)) {
+      controls.push({ kind: "url-parser-or-origin-check", path: "", line });
+    }
+  }
+  return controls;
+}
+
+function nodeExpressOpenRedirectRecords(
+  files: readonly SourceFileSnapshot[],
+): ResidualRiskRecord[] {
+  const records: ResidualRiskRecord[] = [];
+  const emitted = new Set<string>();
+  for (const file of files) {
+    if (
+      !JAVASCRIPT_EXTENSIONS.has(file.extension) ||
+      javascriptTestOrExamplePath(file.path)
+    ) {
+      continue;
+    }
+    const dependency = nodeRuntimeDependency(files, file.path, "express");
+    const majorVersion = Number(dependency?.version.split(".")[0]);
+    if (
+      dependency === undefined ||
+      !Number.isSafeInteger(majorVersion) ||
+      (majorVersion !== 4 && majorVersion !== 5)
+    ) {
+      continue;
+    }
+    const factories = nodeExpressFactoryBindings(file.lines);
+    const structural = javascriptStructuralLines(file.lines).join("\n");
+    for (const instance of nodeExpressInstanceBindings(file.lines)) {
+      const escapedInstance = escapeRegularExpression(instance.local);
+      const routeCallee = new RegExp(
+        `\\b${escapedInstance}\\s*\\.\\s*(?:all|delete|get|head|options|patch|post|put|use)\\s*\\(`,
+        "u",
+      );
+      for (const route of javascriptCallsInText(
+        file.text,
+        structural,
+        1,
+        routeCallee,
+      )) {
+        if (
+          route.line <= instance.line ||
+          nodeStaticString(route.arguments[0]) === undefined
+        ) {
+          continue;
+        }
+        if (
+          javascriptIdentifierReassignedBetween(
+            file.lines,
+            instance.local,
+            instance.line,
+            route.line,
+          ) ||
+          file.lines
+            .slice(instance.line, route.line - 1)
+            .some((line) =>
+              new RegExp(
+                `\\b${escapedInstance}\\s*\\.\\s*(?:all|delete|get|head|options|patch|post|put|use)\\s*=`,
+                "u",
+              ).test(javascriptCodeBeforeComment(line)),
+            )
+        ) {
+          continue;
+        }
+        const routeEndLine =
+          1 + (structural.slice(0, route.close).match(/\n/gu)?.length ?? 0);
+        for (const handlerArgument of route.arguments.slice(1)) {
+          const inline = nodeExpressHandlerParameters(handlerArgument);
+          const named = /^[A-Za-z_$][\w$]*$/u.test(handlerArgument.trim())
+            ? nodeExpressNamedHandler(
+                file.lines,
+                handlerArgument.trim(),
+                route.line,
+              )
+            : undefined;
+          const handler: NodeExpressHandlerScope | undefined =
+            inline === undefined
+              ? named
+              : {
+                  ...inline,
+                  endLine: routeEndLine,
+                  startLine: route.line,
+                };
+          if (handler === undefined) continue;
+          if (
+            handler.symbol !== undefined &&
+            javascriptIdentifierReassignedBetween(
+              file.lines,
+              handler.symbol,
+              handler.startLine,
+              route.line,
+            )
+          ) {
+            continue;
+          }
+          const escapedResponse = escapeRegularExpression(handler.response);
+          const handlerLines = file.lines.slice(
+            handler.startLine - 1,
+            handler.endLine,
+          );
+          const handlerText = handlerLines.join("\n");
+          const handlerStructural =
+            javascriptStructuralLines(handlerLines).join("\n");
+          const bodyParserLine = nodeExpressBodyParserLine(
+            file.lines,
+            instance.local,
+            factories,
+            instance.line,
+            route.line,
+          );
+          const sourcePatterns = nodeExpressSourcePatterns(
+            handler.request,
+            bodyParserLine !== undefined,
+          );
+          const sources = matchingJavascriptModelLines(
+            file.lines,
+            sourcePatterns,
+            16,
+          ).filter(
+            ({ line }) => line >= handler.startLine && line <= handler.endLine,
+          );
+          for (const redirect of javascriptCallsInText(
+            handlerText,
+            handlerStructural,
+            handler.startLine,
+            new RegExp(`\\b${escapedResponse}\\s*\\.\\s*redirect\\s*\\(`, "u"),
+          )) {
+            const target = nodeExpressRedirectTarget(
+              redirect.arguments,
+              majorVersion,
+            );
+            if (target === undefined || target === "") continue;
+            const redirectPrefix = handlerStructural.slice(0, redirect.start);
+            if (
+              nodeExpressBindingAssignedInText(
+                redirectPrefix,
+                handler.request,
+              ) ||
+              nodeExpressBindingAssignedInText(
+                redirectPrefix,
+                handler.response,
+              ) ||
+              new RegExp(
+                `\\b${escapedResponse}\\s*\\.\\s*redirect\\s*=`,
+                "u",
+              ).test(redirectPrefix) ||
+              javascriptIdentifierReassignedBetween(
+                file.lines,
+                handler.request,
+                handler.startLine,
+                redirect.line,
+              ) ||
+              javascriptIdentifierReassignedBetween(
+                file.lines,
+                handler.response,
+                handler.startLine,
+                redirect.line,
+              ) ||
+              file.lines
+                .slice(handler.startLine - 1, redirect.line - 1)
+                .some((line) =>
+                  new RegExp(
+                    `\\b${escapedResponse}\\s*\\.\\s*redirect\\s*=`,
+                    "u",
+                  ).test(javascriptCodeBeforeComment(line)),
+                )
+            ) {
+              continue;
+            }
+            const source = nodeExpressModeledRedirectSource(
+              file.lines,
+              sources,
+              redirect.line,
+              target,
+              sourcePatterns,
+            );
+            if (
+              source === undefined ||
+              nodeExpressFixedDestinationPrefix(
+                file.lines,
+                target,
+                redirect.line,
+              ) ||
+              nodeExpressFailClosedLocalAllowlist(
+                file.lines,
+                target,
+                source.line,
+                redirect.line,
+              ) !== undefined
+            ) {
+              continue;
+            }
+            const key = `${file.path}\0${source.line}\0${redirect.line}`;
+            if (emitted.has(key)) continue;
+            emitted.add(key);
+            const startLine = Math.max(1, redirect.line - CONTEXT_LINES_BEFORE);
+            const endLine = Math.min(
+              file.lines.length,
+              redirect.line + CONTEXT_LINES_AFTER,
+            );
+            const candidateControls = nodeExpressCandidateControls(
+              file.lines,
+              source.line,
+              redirect.line,
+              target,
+            ).map((control) => ({ ...control, path: file.path }));
+            const propagators: NonNullable<
+              ResidualRiskRecord["frameworkModel"]
+            >["propagators"] = [
+              {
+                kind: `express-${instance.kind}-factory-binding`,
+                path: file.path,
+                line: instance.factoryLine,
+                symbol: instance.local,
+              },
+              {
+                kind: "express-literal-route-registration",
+                path: file.path,
+                line: route.line,
+                symbol: nodeStaticString(route.arguments[0]),
+              },
+              {
+                kind: "express-handler-request-response-binding",
+                path: file.path,
+                line: handler.startLine,
+                symbol: `${handler.request},${handler.response}`,
+              },
+              {
+                kind: "express-runtime-dependency",
+                path: dependency.manifestPath,
+                line: dependency.line,
+                symbol: `express@${dependency.version}:${dependency.proof}`,
+              },
+            ];
+            if (
+              bodyParserLine !== undefined &&
+              source.kind === "express-request-body-field"
+            ) {
+              propagators.splice(1, 0, {
+                kind: "express-body-parser-middleware",
+                path: file.path,
+                line: bodyParserLine,
+                symbol: instance.local,
+              });
+            }
+            records.push({
+              path: file.path,
+              line: redirect.line,
+              categories: [
+                "framework-dataflow:node-express-open-redirect",
+                `modeled-source:${source.kind}`,
+                "modeled-sink:express-response-redirect-location",
+              ],
+              priority: 114,
+              startLine,
+              endLine,
+              excerpt: sourceExcerpt(file.lines, startLine, endLine),
+              sourceExcerpt: sourceExcerpt(
+                file.lines,
+                Math.max(1, source.line - 1),
+                Math.min(file.lines.length, source.line + 1),
+              ),
+              frameworkModel: {
+                schemaVersion: "1.2",
+                id: "node-express-open-redirect",
+                language: "javascript-typescript",
+                scope: "same-file",
+                source: {
+                  kind: source.kind,
+                  path: file.path,
+                  line: source.line,
+                },
+                sink: {
+                  kind: "express-response-redirect-location",
+                  path: file.path,
+                  line: redirect.line,
+                  cweIds: ["CWE-601"],
+                },
+                propagators,
+                candidateControls,
+              },
+            });
+            if (records.length >= MAX_FRAMEWORK_CROSS_FILE_RECORDS)
+              return records;
+          }
+        }
+      }
     }
   }
   return records;

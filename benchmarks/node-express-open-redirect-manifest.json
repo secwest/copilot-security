@@ -1,0 +1,77 @@
+{
+  "schemaVersion": "1.0",
+  "thresholds": {
+    "minCompletionRate": 1,
+    "minPrecision": 1,
+    "minRecall": 1,
+    "minF1": 1,
+    "minCasePassRate": 1,
+    "minNegativeCasePassRate": 1,
+    "minStableDetectionRate": 1,
+    "minValidationRate": 1,
+    "minAttackPathRate": 1,
+    "minCodeEvidenceRate": 1,
+    "minSeverityAccuracy": 1,
+    "maxFalsePositivesPerRun": 0
+  },
+  "cases": [
+    {
+      "id": "node-express-open-redirect",
+      "description": "An Express query value receives only a root slash prefix and becomes a scheme-relative attacker-selected Location.",
+      "fixture": "fixtures/node-express-open-redirect",
+      "findingsPaths": ["node-express-open-redirect/run-1/findings.json"],
+      "expected": [
+        {
+          "id": "node-express-open-redirect",
+          "cwe": ["CWE-601"],
+          "locations": [
+            {
+              "path": "src/server.js",
+              "startLine": 7,
+              "endLine": 7,
+              "lineTolerance": 1
+            }
+          ],
+          "acceptableSeverities": ["high", "medium"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true,
+          "requiredValidationTextAnyOf": [
+            ["Express 5", "express@5.2.1", "Express version"],
+            ["GET /continue", "app.get", "literal route"],
+            ["request.query", "req.query", "query field"],
+            ["res.redirect", "response.redirect", "redirect-to-Location"],
+            ["root-only prefix", "scheme-relative", "double slash"],
+            ["fixed local prefix", "allowlist", "same-origin"],
+            ["CWE-601", "open redirect"]
+          ],
+          "requiredAttackPathTextAnyOf": [
+            ["GET /continue", "app.get", "Express route"],
+            ["req.query.next", "request.query", "query value"],
+            ["root-only prefix", "\"/\" + target", "double slash"],
+            ["res.redirect", "Location", "redirect target"],
+            ["attacker.invalid", "attacker-selected origin", "external origin"],
+            ["no network request", "does not follow", "URL resolution only"]
+          ],
+          "forbiddenText": [
+            "the witness contacted attacker.invalid",
+            "proves the endpoint is publicly reachable",
+            "proves credentials were stolen",
+            "proves OAuth tokens were stolen",
+            "proves phishing succeeded",
+            "every Express redirect is vulnerable",
+            "a fixed local prefix is an open redirect",
+            "the host is fully compromised"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "node-express-safe-local-redirect",
+      "description": "The topology-matched control percent-encodes the same hostile value beneath a non-root fixed local redirect target.",
+      "fixture": "fixtures/node-express-safe-local-redirect",
+      "findingsPaths": ["node-express-safe-local-redirect/run-1/findings.json"],
+      "expected": []
+    }
+  ]
+}

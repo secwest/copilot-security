@@ -2,6 +2,75 @@
 
 This log records consequential implementation decisions, their evidence, and the tradeoffs that future scanner work must preserve.
 
+## 2026-08-31 — Prove Express redirect reachability and destination control
+
+**Measured gap and comparator.** An exact production Express 5 application
+registered `GET /leave`, read `req.query.next`, prepended only `"/"`, and passed
+the result to `res.redirect`. The unchanged inventory emitted no row. CodeQL's
+maintained JavaScript server-side redirect model identifies remote input
+reaching a redirect as CWE-601, while its incomplete URL-substring guidance
+uses Express to show that string containment is not an origin boundary.
+Express documents route registration, `res.redirect([status,] path)`, and the
+deprecated Express 4 destination-first overload. This created a concrete,
+framework-specific false negative rather than a speculative pattern gap.
+
+**Typed decision.** Add `node-express-open-redirect` only when an exact
+production dependency proves Express 4 or 5 and the same source file proves an
+official default, namespace, import-equals, CommonJS, direct-require, or named
+Router binding. Require a stable application or router, a literal registered
+route, exact handler/request/response identity, and an official response
+redirect. Accept query, route-parameter, or body fields; body fields
+additionally require an official parser registered before the route on the same
+instance. Follow only a direct value, one local assignment, or one fixed-string
+concatenation, and preserve the exact source, field, route, sink, Location, and
+origin-selection evidence for review.
+
+**Control boundary.** A root-only prefix is not a sanitizer:
+`"/" + "//attacker.invalid/path"` remains scheme-relative and selects the
+attacker's authority. A fixed non-root local prefix or complete fixed authority
+does constrain the destination and is suppressed. A local allowlist suppresses
+only when it is an unreassigned uppercase `const Set` with at least two fixed
+local destinations and a direct rejecting return/throw guard over the same
+value. Mutated sets and `.includes()` substring checks remain reportable.
+Lookalikes, unresolved or development-only dependencies, unsupported versions,
+dynamic routes, unregistered or late handlers, rebound factories, instances,
+requests, or responses, overwritten route/parser/redirect members, opaque
+transforms, malformed overloads, and missing or late body parsers fail closed.
+
+**Executable evidence.** Thirty focused tests with 50 assertions cover Express
+4 and 5, ESM and CommonJS, inline/named handlers, applications and routers,
+query/parameter/body sources, both redirect signatures, root prefixes, weak
+substring controls, and the fail-closed boundaries above. A pinned Express
+5.2.1 pair uses the same route topology; the exploit emits the hostile
+scheme-relative destination as Location, while the control selects only a
+fixed local prefix. Both witnesses perform no network I/O. The strict manifest
+advances the canonical corpus to 205 pairs, 410 cases, and 1,230 repeated scan
+positions.
+
+**Local acceptance.** The complete managed suite exercises 2,227 tests across
+219 files: 2,196 pass, 31 intentionally skip, and the two managed-sandbox
+Git-metadata and Windows-ACL cases pass unchanged in a native rerun. The full
+aggregate executes 17,239 assertions. Generated-model drift, TypeScript, the
+production build, formatting, package inspection, and both witnesses pass.
+Two independently built 299-entry npm archives are byte-identical at 2,475,977
+bytes with SHA-256
+`c2376a31cc693893a866168d918b5ef4d98dd813f908ce5136b22782c216a7f6`.
+Windows builds without warnings/errors and passes 7/7 core plus 3/3 shared
+tests. Ubuntu/WSL builds without warnings/errors, passes 7/7 core, 3/3 shared,
+2/2 headless, non-graphical, and X11/Xvfb gates. Two repository inventories are
+byte-identical at 256 rows and 639,552 bytes with SHA-256
+`3c49c84a1da5291344af570806a62d8add01ad6a281de77f405b3c74f1635be1`;
+only the intentional exploit fixture produces the new CWE-601 row.
+
+**Operational consequence.** Copilot CLI 1.0.81-8 completed a live authenticated
+probe as `secwest`; its own telemetry reports unlimited chat and completions,
+73.7% of a 10,000,000-unit premium entitlement remaining, and continued use
+permitted after exhaustion. There is no scanner-side cap when the maximum-cost
+option is omitted. The live deep self-review is intentionally run from the
+public immutable implementation checkpoint, not from an unpublished working
+tree. This increment broadens deterministic recall without relaxing the
+evidence boundary and does not complete the continuing effectiveness goal.
+
 ## 2026-08-31 — Model Flask's combined request-values collection
 
 **Measured gap and comparative source.** A source-matched Flask GET route read

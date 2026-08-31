@@ -6,6 +6,53 @@ All notable scanner, application, benchmark, and operational changes are recorde
 
 ### Scanner effectiveness
 
+- Closed a measured Node/Express server-side open-redirect false negative. The
+  unchanged inventory emitted no row for an exact Express 5 route that passed
+  `req.query.next` through `"/" + value` to `res.redirect`; the new focused
+  case failed alone before the model was added.
+- Added a bounded `node-express-open-redirect` model for production Express 4
+  and 5 applications and routers. It proves exact dependency provenance,
+  official imports or `require`, stable application/router registration,
+  literal route reachability, request/response identity, query/parameter/body
+  provenance, parser ordering for body fields, redirect signature, Location
+  selection, and one local assignment or fixed-prefix propagation step.
+- Preserved root-only prefix redirects as CWE-601 candidates because
+  `"/" + "//attacker.invalid/path"` still selects an external authority. Fixed
+  non-root local prefixes, complete fixed authorities, static destinations,
+  and an immutable uppercase local-destination Set with a direct rejecting
+  guard remain controls. Weak substring checks and mutated allowlists do not
+  suppress the signal.
+- Added 30 focused regressions with 50 assertions, including Express 4/5,
+  ESM/CommonJS, named and inline handlers, Router bindings, all three request
+  collections, redirect overloads, weak checks, rebindings, overwritten APIs,
+  dynamic routes, parser ordering, dependency/version boundaries, and matched
+  controls. A pinned Express 5.2.1 exploit/control pair and no-network witness
+  advance the canonical corpus to 205 pairs, 410 cases, and 1,230 repeated scan
+  positions.
+- The complete managed suite exercises 2,227 tests across 219 files: 2,196
+  pass, 31 are intentional platform or integration skips, and the two expected
+  managed-sandbox Git-metadata/Windows-ACL checks pass unchanged when rerun
+  natively. The aggregate executes 17,239 assertions. Generated-model drift,
+  TypeScript, production build, repository formatting, both witnesses, package
+  inspection, and Windows/Linux desktop gates are green.
+- Two npm archives are byte-identical at 2,475,977 bytes with 299 entries and
+  SHA-256
+  `c2376a31cc693893a866168d918b5ef4d98dd813f908ce5136b22782c216a7f6`;
+  archive inspection validates the public API, CLI, and all 79 bundled plugin
+  files. The warning-free Windows executable is 346,796 bytes with SHA-256
+  `8b3da5cdd755e37950d7263a5dd960c943aef3c76334873d7ed6fb674382bad2`;
+  the WSL/Ubuntu build passes 7/7 core, 3/3 shared, 2/2 headless, non-graphical,
+  and X11/Xvfb gates, and its 72,568-byte executable has SHA-256
+  `7e29d642169a6c218c249216c6c10648307aea88faf636b69ac25741104b4adf`.
+- Two whole-repository deterministic self-inventories are byte-identical at
+  256 rows and 639,552 bytes with SHA-256
+  `3c49c84a1da5291344af570806a62d8add01ad6a281de77f405b3c74f1635be1`.
+  Exactly one Express CWE-601 row identifies the intentional exploit fixture
+  at source line 6 and sink line 7; the topology-matched safe fixture is absent.
+  Copilot CLI 1.0.81-8 authentication and quota telemetry confirm unlimited
+  chat/completions, 73.7% premium entitlement remaining, and permission to run
+  after exhaustion. Live model self-review follows the public checkpoint so
+  unpublished working-tree source is not sent outside the host.
 - Closed a measured Flask open-redirect false negative. The unchanged model
   ignored an attacker-selected GET query field read through the official
   `request.values` collection before `flask.redirect`; all 43 preceding Flask
