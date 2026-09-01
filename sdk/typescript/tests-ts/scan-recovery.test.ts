@@ -208,8 +208,14 @@ async function startDraftScan(
   });
   const discoveryDirectory = join(scanDir, "artifacts", "02_discovery");
   await mkdir(discoveryDirectory, { recursive: true });
-  await writeFile(join(discoveryDirectory, "in_scope_files.txt"), "");
-  fixture.inventorySha256 = createHash("sha256").update("").digest("hex");
+  const inventoryBytes = "src/extract.py\n";
+  await writeFile(
+    join(discoveryDirectory, "in_scope_files.txt"),
+    inventoryBytes,
+  );
+  fixture.inventorySha256 = createHash("sha256")
+    .update(inventoryBytes)
+    .digest("hex");
   const manifestPath = join(scanDir, "scan-manifest.json");
   const manifest = await readJson<{
     scan: {
@@ -236,6 +242,11 @@ async function startDraftScan(
     document.scanId = fixture.scanId;
     await writeJson(path, document);
   }
+  const coveragePath = join(scanDir, "coverage.json");
+  const coverage = await readJson<CoverageDocument>(coveragePath);
+  expect(Array.isArray(coverage.surfaces)).toBeTrue();
+  (coverage.surfaces as CoverageSurface[])[0]!.label = "src/extract.py";
+  await writeJson(coveragePath, coverage);
   await writeFile(join(scanDir, "report.md"), "# Draft report\n");
   return fixture;
 }
@@ -2537,6 +2548,47 @@ describe("malformed scan artifact recovery", () => {
     );
   });
 
+  test.each(["finding location", "code evidence"] as const)(
+    "rejects an out-of-scope model-authored %s before repository grounding",
+    async (kind) => {
+      const fixture = await startDraftScan();
+      await writeFile(
+        join(fixture.repository, "src", "excluded.py"),
+        "# excluded secret marker\n",
+      );
+      const path = join(fixture.scanDir, "findings.json");
+      const document = await readJson<FindingsDocument>(path);
+      const finding = document.findings[0]!;
+      finding.locations = [
+        {
+          path:
+            kind === "finding location" ? "src/excluded.py" : "src/extract.py",
+          startLine: 1,
+          endLine: 1,
+          role: "sink",
+        },
+      ] as unknown as Finding["locations"];
+      finding.codeEvidence = [
+        {
+          id: "repository-sink",
+          label: "Repository sink",
+          path: kind === "code evidence" ? "src/excluded.py" : "src/extract.py",
+          startLine: 1,
+          endLine: 1,
+          role: "sink",
+          code:
+            kind === "code evidence" ? "# excluded secret marker" : "# fixture",
+          explanation: "The cited repository line is security relevant.",
+        },
+      ] as unknown as NonNullable<Finding["codeEvidence"]>;
+      await writeJson(path, document);
+
+      await expect(completeScan(fixture)).rejects.toThrow(
+        `findings.json finding 1 ${kind} path is outside the immutable in-scope inventory: src/excluded.py`,
+      );
+    },
+  );
+
   test("fails closed when vulnerable and control evidence paths are transposed", async () => {
     const fixture = await startDraftScan();
     const vulnerablePath = join(fixture.repository, "src", "vulnerable.js");
@@ -2549,6 +2601,15 @@ describe("malformed scan artifact recovery", () => {
       controlPath,
       'return reply.redirect("/continue/" + encodeURIComponent(request.query.next));\n',
     );
+    const inventoryBytes =
+      "src/control.js\nsrc/extract.py\nsrc/vulnerable.js\n";
+    await writeFile(
+      join(fixture.scanDir, "artifacts", "02_discovery", "in_scope_files.txt"),
+      inventoryBytes,
+    );
+    fixture.inventorySha256 = createHash("sha256")
+      .update(inventoryBytes)
+      .digest("hex");
 
     const path = join(fixture.scanDir, "findings.json");
     const document = await readJson<FindingsDocument>(path);

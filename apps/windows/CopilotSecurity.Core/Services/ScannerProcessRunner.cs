@@ -5,7 +5,15 @@ using Secwest.CopilotSecurity.Core.Models;
 
 namespace Secwest.CopilotSecurity.Core.Services;
 
-public sealed partial class ScannerProcessRunner
+public interface IScannerProcessRunner
+{
+    Task<ScannerProcessResult> RunAsync(
+        ScannerInvocation invocation,
+        IProgress<ScannerProgress>? progress,
+        CancellationToken cancellationToken);
+}
+
+public sealed partial class ScannerProcessRunner : IScannerProcessRunner
 {
     private const int MaximumStandardOutputCharacters = 64 * 1024 * 1024;
     private const int MaximumStandardErrorCharacters = 8 * 1024 * 1024;

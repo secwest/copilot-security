@@ -8,6 +8,8 @@ namespace Secwest.CopilotSecurity.Gui.Linux;
 
 public sealed partial class MainWindow : Window
 {
+    private bool shutdownStarted;
+    private bool shutdownComplete;
     public MainViewModel ViewModel => (MainViewModel)DataContext!;
 
     public MainWindow()
@@ -21,10 +23,23 @@ public sealed partial class MainWindow : Window
         DataContext = new MainViewModel(platform);
     }
 
-    protected override void OnClosed(EventArgs e)
+    protected override async void OnClosing(WindowClosingEventArgs e)
     {
-        ViewModel.Dispose();
-        base.OnClosed(e);
+        if (shutdownComplete)
+        {
+            base.OnClosing(e);
+            return;
+        }
+        e.Cancel = true;
+        base.OnClosing(e);
+        if (shutdownStarted)
+        {
+            return;
+        }
+        shutdownStarted = true;
+        await ViewModel.DisposeAsync();
+        shutdownComplete = true;
+        Close();
     }
 
     private async void BrowseRepository_Click(object? sender, RoutedEventArgs e) =>

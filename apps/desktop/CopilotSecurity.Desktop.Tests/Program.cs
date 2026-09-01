@@ -1,11 +1,14 @@
 using Secwest.CopilotSecurity.Desktop;
 using Secwest.CopilotSecurity.Desktop.ViewModels;
+using Secwest.CopilotSecurity.Core.Models;
+using Secwest.CopilotSecurity.Core.Services;
 
-var tests = new (string Name, Action Run)[]
+var tests = new (string Name, Func<Task> Run)[]
 {
-    ("Windows defaults retain the native application contract", WindowsDefaults),
-    ("Linux defaults use isolated executable and state names", LinuxDefaults),
+    ("Windows defaults retain the native application contract", () => RunSync(WindowsDefaults)),
+    ("Linux defaults use isolated executable and state names", () => RunSync(LinuxDefaults)),
     ("shared view model honors platform-specific durable paths", SharedViewModelPaths),
+    ("shared view model awaits scanner termination during shutdown", ShutdownAwaitsScannerTermination),
 };
 
 var failures = new List<string>();
@@ -13,7 +16,7 @@ foreach (var test in tests)
 {
     try
     {
-        test.Run();
+        await test.Run();
         Console.WriteLine("PASS " + test.Name);
     }
     catch (Exception exception)
@@ -25,6 +28,12 @@ foreach (var test in tests)
 
 Console.WriteLine($"{tests.Length - failures.Count}/{tests.Length} tests passed");
 return failures.Count == 0 ? 0 : 1;
+
+static Task RunSync(Action action)
+{
+    action();
+    return Task.CompletedTask;
+}
 
 static void WindowsDefaults()
 {
@@ -52,7 +61,7 @@ static void LinuxDefaults()
     Assert.False(options.PathComparer.Equals("A", "a"));
 }
 
-static void SharedViewModelPaths()
+static async Task SharedViewModelPaths()
 {
     var root = Path.Combine(
         Path.GetTempPath(),
@@ -68,7 +77,7 @@ static void SharedViewModelPaths()
             "isolated-history",
             "isolated-benchmarks",
             StringComparer.Ordinal);
-        using (var viewModel = new MainViewModel(options))
+        await using (var viewModel = new MainViewModel(options))
         {
             viewModel.StateRoot = state;
             viewModel.RepositoryPath = root;
@@ -84,7 +93,7 @@ static void SharedViewModelPaths()
         }
 
         Assert.True(File.Exists(settings));
-        using (var restored = new MainViewModel(options))
+        await using (var restored = new MainViewModel(options))
         {
             Assert.Equal(state, restored.StateRoot);
             Assert.Equal(root, restored.RepositoryPath);
@@ -96,6 +105,92 @@ static void SharedViewModelPaths()
         {
             Directory.Delete(root, recursive: true);
         }
+    }
+}
+
+static async Task ShutdownAwaitsScannerTermination()
+{
+    var root = Path.Combine(
+        Path.GetTempPath(),
+        "copilot-security-shutdown-tests-" + Guid.NewGuid().ToString("N"));
+    var repository = Path.Combine(root, "repository");
+    var scanner = Path.Combine(root, "copilot-security.mjs");
+    Directory.CreateDirectory(repository);
+    await File.WriteAllTextAsync(scanner, "// inert scanner fixture\n");
+    var options = new DesktopPlatformOptions(
+        Path.Combine(root, "preferences", "settings.json"),
+        ["missing-node"],
+        ["missing-copilot"],
+        "isolated-history",
+        "isolated-benchmarks",
+        StringComparer.Ordinal);
+    var runner = new ControlledScannerProcessRunner();
+    try
+    {
+        await using var viewModel = new MainViewModel(options, runner)
+        {
+            StateRoot = Path.Combine(root, "state"),
+            RepositoryPath = repository,
+            NodePath = Environment.ProcessPath!,
+            ScannerEntryPoint = scanner,
+            CopilotPath = Environment.ProcessPath!,
+        };
+        viewModel.StartScanCommand.Execute(null);
+        await runner.Started.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+        var shutdown = viewModel.DisposeAsync().AsTask();
+        var concurrentShutdown = viewModel.DisposeAsync().AsTask();
+        await runner.CancellationObserved.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.False(shutdown.IsCompleted);
+        Assert.False(concurrentShutdown.IsCompleted);
+
+        runner.AllowTermination.TrySetResult();
+        await Task.WhenAll(shutdown, concurrentShutdown)
+            .WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.True(runner.Completed);
+    }
+    finally
+    {
+        if (Directory.Exists(root))
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+}
+
+sealed class ControlledScannerProcessRunner : IScannerProcessRunner
+{
+    public TaskCompletionSource Started { get; } = new(
+        TaskCreationOptions.RunContinuationsAsynchronously);
+    public TaskCompletionSource CancellationObserved { get; } = new(
+        TaskCreationOptions.RunContinuationsAsynchronously);
+    public TaskCompletionSource AllowTermination { get; } = new(
+        TaskCreationOptions.RunContinuationsAsynchronously);
+    public bool Completed { get; private set; }
+
+    public async Task<ScannerProcessResult> RunAsync(
+        ScannerInvocation invocation,
+        IProgress<ScannerProgress>? progress,
+        CancellationToken cancellationToken)
+    {
+        Started.TrySetResult();
+        try
+        {
+            await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            CancellationObserved.TrySetResult();
+        }
+        await AllowTermination.Task;
+        Completed = true;
+        return new ScannerProcessResult(
+            ScanRunState.Canceled,
+            null,
+            TimeSpan.Zero,
+            string.Empty,
+            string.Empty,
+            "Canceled by shutdown test.");
     }
 }
 

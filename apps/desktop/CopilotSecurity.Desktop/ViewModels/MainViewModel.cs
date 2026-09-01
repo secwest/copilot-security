@@ -10,16 +10,19 @@ using Secwest.CopilotSecurity.Desktop.Infrastructure;
 
 namespace Secwest.CopilotSecurity.Desktop.ViewModels;
 
-public sealed class MainViewModel : ObservableObject, IDisposable
+public sealed class MainViewModel : ObservableObject, IAsyncDisposable
 {
     private readonly ScannerCommandBuilder commandBuilder = new();
-    private readonly ScannerProcessRunner processRunner = new();
+    private readonly IScannerProcessRunner processRunner;
     private readonly ScanArtifactReader artifactReader = new();
     private readonly BenchmarkComparisonReader benchmarkComparisonReader = new();
     private readonly GuiSettingsStore settingsStore = new();
     private readonly DesktopPlatformOptions platform;
     private readonly string settingsPath;
     private CancellationTokenSource? operationCancellation;
+    private TaskCompletionSource? operationCompletion;
+    private int disposeStarted;
+    private Task? disposeTask;
     private string repositoryPath = Environment.CurrentDirectory;
     private string nodePath = string.Empty;
     private string copilotPath = string.Empty;
@@ -59,9 +62,12 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private bool isBusy;
     private TimeSpan elapsed;
 
-    public MainViewModel(DesktopPlatformOptions? platformOptions = null)
+    public MainViewModel(
+        DesktopPlatformOptions? platformOptions = null,
+        IScannerProcessRunner? scannerProcessRunner = null)
     {
         platform = platformOptions ?? DesktopPlatformOptions.Current();
+        processRunner = scannerProcessRunner ?? new ScannerProcessRunner();
         settingsPath = platform.SettingsPath;
         nodePath = FindOnPath(platform.NodeExecutableNames) ?? string.Empty;
         copilotPath = FindOnPath(platform.CopilotExecutableNames) ?? string.Empty;
@@ -244,7 +250,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
                 MaximumAiCredits = ParseOptionalInt(MaximumCredits, "Maximum credits"),
             };
             var invocation = commandBuilder.BuildScan(Installation, request);
-            operationCancellation = new CancellationTokenSource();
+            var operationToken = BeginOperation();
             Status = "Scanner running";
             CurrentStage = "starting";
             var progress = new Progress<ScannerProgress>(item =>
@@ -255,7 +261,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             var result = await processRunner.RunAsync(
                 invocation,
                 progress,
-                operationCancellation.Token).ConfigureAwait(true);
+                operationToken).ConfigureAwait(true);
             Elapsed = result.Elapsed;
             if (!result.IsSuccess)
             {
@@ -285,8 +291,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         }
         finally
         {
-            operationCancellation?.Dispose();
-            operationCancellation = null;
+            CompleteOperation();
             IsBusy = false;
         }
     }
@@ -302,14 +307,14 @@ public sealed class MainViewModel : ObservableObject, IDisposable
                 BenchmarkManifest,
                 BenchmarkResultsDirectory,
                 BenchmarkRequireStatus);
-            operationCancellation = new CancellationTokenSource();
+            var operationToken = BeginOperation();
             Status = "Benchmark running";
             var progress = new Progress<ScannerProgress>(item =>
             {
                 CurrentStage = item.Stage;
                 AddProgress(item);
             });
-            var result = await processRunner.RunAsync(invocation, progress, operationCancellation.Token)
+            var result = await processRunner.RunAsync(invocation, progress, operationToken)
                 .ConfigureAwait(true);
             Elapsed = result.Elapsed;
             BenchmarkOutput = result.StandardOutput.Length > 0
@@ -328,8 +333,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         }
         finally
         {
-            operationCancellation?.Dispose();
-            operationCancellation = null;
+            CompleteOperation();
             IsBusy = false;
         }
     }
@@ -429,6 +433,25 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     }
 
     private void Cancel() => operationCancellation?.Cancel();
+
+    private CancellationToken BeginOperation()
+    {
+        ObjectDisposedException.ThrowIf(
+            Volatile.Read(ref disposeStarted) != 0,
+            this);
+        operationCompletion = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        operationCancellation = new CancellationTokenSource();
+        return operationCancellation.Token;
+    }
+
+    private void CompleteOperation()
+    {
+        var cancellation = Interlocked.Exchange(ref operationCancellation, null);
+        var completion = Interlocked.Exchange(ref operationCompletion, null);
+        cancellation?.Dispose();
+        completion?.TrySetResult();
+    }
 
     private void OpenReport()
     {
@@ -594,11 +617,35 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private static string Prefer(string candidate, string fallback) =>
         string.IsNullOrWhiteSpace(candidate) ? fallback : candidate;
 
-    public void Dispose()
+    public ValueTask DisposeAsync()
     {
-        operationCancellation?.Cancel();
-        operationCancellation?.Dispose();
-        operationCancellation = null;
+        var existing = Volatile.Read(ref disposeTask);
+        if (existing is not null)
+        {
+            return new ValueTask(existing);
+        }
+        if (Interlocked.CompareExchange(ref disposeStarted, 1, 0) == 0)
+        {
+            var created = DisposeCoreAsync();
+            var raced = Interlocked.CompareExchange(ref disposeTask, created, null);
+            return new ValueTask(raced ?? created);
+        }
+        while ((existing = Volatile.Read(ref disposeTask)) is null)
+        {
+            Thread.Yield();
+        }
+        return new ValueTask(existing);
+    }
+
+    private async Task DisposeCoreAsync()
+    {
+        var cancellation = Volatile.Read(ref operationCancellation);
+        var completion = Volatile.Read(ref operationCompletion);
+        cancellation?.Cancel();
+        if (completion is not null)
+        {
+            await completion.Task.ConfigureAwait(false);
+        }
         try
         {
             settingsStore.Save(

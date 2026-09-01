@@ -3384,7 +3384,10 @@ def _standalone_location(raw: Any) -> dict[str, Any] | None:
 def _standalone_source_evidence(
     location: dict[str, Any],
     summary: str,
+    in_scope_paths: set[str],
 ) -> dict[str, Any] | None:
+    if location["path"] not in in_scope_paths:
+        return None
     repository_value = os.environ.get("COPILOT_SECURITY_REPOSITORY")
     if not repository_value:
         return None
@@ -3516,6 +3519,7 @@ def _standalone_locations_overlap(
 def _ground_standalone_findings_evidence(
     findings: dict[str, Any],
     warnings: list[str] | None,
+    in_scope_paths: set[str],
 ) -> None:
     """Ground model-authored snippets without changing their claimed meaning.
 
@@ -3539,6 +3543,9 @@ def _ground_standalone_findings_evidence(
     def source_lines(relative_path: str) -> list[str] | None:
         if relative_path in source_cache:
             return source_cache[relative_path]
+        if relative_path not in in_scope_paths:
+            source_cache[relative_path] = None
+            return None
         candidate = (repository / relative_path).resolve()
         try:
             candidate.relative_to(repository)
@@ -3643,6 +3650,7 @@ def _ground_standalone_findings_evidence(
 def _normalize_standalone_finding(
     finding: Any,
     index: int,
+    in_scope_paths: set[str],
 ) -> dict[str, Any] | None:
     if not isinstance(finding, dict):
         return finding
@@ -3870,7 +3878,9 @@ def _normalize_standalone_finding(
             }
         )
     if not code_evidence and locations:
-        recovered_evidence = _standalone_source_evidence(locations[0], summary)
+        recovered_evidence = _standalone_source_evidence(
+            locations[0], summary, in_scope_paths
+        )
         if recovered_evidence is not None:
             code_evidence.append(recovered_evidence)
 
@@ -3923,7 +3933,10 @@ def _normalize_standalone_finding(
     return normalized
 
 
-def _normalize_standalone_findings_draft(findings: Any) -> tuple[dict[str, Any], bool]:
+def _normalize_standalone_findings_draft(
+    findings: Any,
+    in_scope_paths: set[str],
+) -> tuple[dict[str, Any], bool]:
     simplified_container = isinstance(findings, list)
     if simplified_container:
         findings = {"findings": findings}
@@ -3933,7 +3946,7 @@ def _normalize_standalone_findings_draft(findings: Any) -> tuple[dict[str, Any],
     if not isinstance(rows, list):
         return findings, False
     normalized = [
-        _normalize_standalone_finding(finding, index)
+        _normalize_standalone_finding(finding, index, in_scope_paths)
         for index, finding in enumerate(rows)
     ]
     converted = [
@@ -4190,6 +4203,37 @@ def _read_in_scope_inventory(scan_dir: Path) -> list[str]:
             paths.append(normalized)
             seen.add(normalized)
     return paths
+
+
+def _require_findings_paths_in_scope(
+    findings: dict[str, Any],
+    in_scope_paths: set[str],
+) -> None:
+    """Authorize every model-authored repository path before source access."""
+
+    rows = findings.get("findings")
+    if not isinstance(rows, list):
+        return
+    for finding_index, finding in enumerate(rows, start=1):
+        if not isinstance(finding, dict):
+            continue
+        for field, label in (
+            ("locations", "finding location"),
+            ("codeEvidence", "code evidence"),
+        ):
+            values = finding.get(field)
+            if not isinstance(values, list):
+                continue
+            for raw in values:
+                location = _standalone_location(raw)
+                if location is None:
+                    continue
+                path = location["path"]
+                if path not in in_scope_paths:
+                    raise ContractError(
+                        f"findings.json finding {finding_index} {label} path is "
+                        f"outside the immutable in-scope inventory: {path}"
+                    )
 
 
 def _read_bounded_scan_local_bytes(
@@ -4997,10 +5041,9 @@ def _reconcile_external_sarif_seed_coverage(
 
 def _reconcile_coverage_with_inventory(
     coverage: dict[str, Any],
-    scan_dir: Path,
+    inventory_paths: list[str],
     completion_warnings: list[str] | None,
 ) -> None:
-    inventory_paths = _read_in_scope_inventory(scan_dir)
     if not inventory_paths:
         return
     surfaces = coverage.get("surfaces")
@@ -5078,6 +5121,8 @@ def _prepare_scan_finalization(
     scan_dir = _require_scan_directory(scan_dir)
     schema_dir = schema_dir or Path(__file__).resolve().parent.parent / "schemas"
     manifest = _read_scan_local_json(scan_dir, "scan-manifest.json", "scan-manifest.json")
+    inventory_paths = _read_in_scope_inventory(scan_dir)
+    in_scope_paths = set(inventory_paths)
     manifest, simplified_manifest = _normalize_standalone_manifest_draft(
         manifest, completion_binding
     )
@@ -5107,14 +5152,19 @@ def _prepare_scan_finalization(
         draft_recovery_warnings=completion_warnings if not was_sealed else None,
     )
     if not was_sealed:
-        findings, simplified_findings = _normalize_standalone_findings_draft(findings)
-        _ground_standalone_findings_evidence(findings, completion_warnings)
+        findings, simplified_findings = _normalize_standalone_findings_draft(
+            findings, in_scope_paths
+        )
+        _require_findings_paths_in_scope(findings, in_scope_paths)
+        _ground_standalone_findings_evidence(
+            findings, completion_warnings, in_scope_paths
+        )
         coverage, simplified_coverage = _normalize_standalone_coverage_draft(
             coverage, completion_binding
         )
         _reconcile_standalone_coverage_with_findings(coverage, findings)
         _reconcile_coverage_with_inventory(
-            coverage, scan_dir, completion_warnings
+            coverage, inventory_paths, completion_warnings
         )
         _reconcile_external_sarif_seed_coverage(
             scan_dir,
@@ -5137,6 +5187,7 @@ def _prepare_scan_finalization(
         )
         _normalize_unsealed_open_questions(coverage)
     else:
+        _require_findings_paths_in_scope(findings, in_scope_paths)
         _reconcile_external_sarif_seed_coverage(
             scan_dir,
             coverage,
