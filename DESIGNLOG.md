@@ -59,6 +59,20 @@ recall measurement. The scan uses 5,468,302 input tokens (5,109,366 cached),
 authentication, quota, credit-limit, rate-limit, or terminal classifier failure.
 The scanner-effectiveness goal remains active.
 
+**Hosted closure.** Every workflow family passes on code checkpoint
+`0c45984d17fdde8242dd655b92b070920d577736`: Node run
+[`33556005622`](https://github.com/secwest/copilot-security/actions/runs/33556005622),
+[container `33556005567`](https://github.com/secwest/copilot-security/actions/runs/33556005567),
+[Windows GUI `33556006081`](https://github.com/secwest/copilot-security/actions/runs/33556006081),
+[Linux GUI `33556005703`](https://github.com/secwest/copilot-security/actions/runs/33556005703),
+[.NET `33556006270`](https://github.com/secwest/copilot-security/actions/runs/33556006270),
+[Go `33556006390`](https://github.com/secwest/copilot-security/actions/runs/33556006390),
+[Java `33556006670`](https://github.com/secwest/copilot-security/actions/runs/33556006670),
+[Kotlin `33556005936`](https://github.com/secwest/copilot-security/actions/runs/33556005936),
+[PHP `33556006412`](https://github.com/secwest/copilot-security/actions/runs/33556006412),
+[Ruby `33556006555`](https://github.com/secwest/copilot-security/actions/runs/33556006555),
+and [Rust `33556005864`](https://github.com/secwest/copilot-security/actions/runs/33556005864).
+
 ## 2026-09-01 — Recover persistent classifier refusal across isolated sessions
 
 **The observed failure was neither quota nor authentication.** A deep scan of

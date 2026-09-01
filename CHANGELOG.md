@@ -87,6 +87,11 @@ All notable scanner, application, benchmark, and operational changes are recorde
   into unsupported output. The run used 5,468,302 input tokens (5,109,366
   cached), 48,578 output tokens, and an estimated $6.25168675. No authentication,
   quota, credit-limit, rate-limit, or terminal classifier failure occurred.
+- Post-draft recovery checkpoint `0c45984d17fdde8242dd655b92b070920d577736`
+  passes every hosted workflow family: Node `33556005622`, container
+  `33556005567`, Windows GUI `33556006081`, Linux GUI `33556005703`, .NET
+  `33556006270`, Go `33556006390`, Java `33556006670`, Kotlin `33556005936`,
+  PHP `33556006412`, Ruby `33556006555`, and Rust `33556005864`.
 - Closed a measured Express credentialed-CORS false negative. A route that
   reflects an arbitrary request Origin, enables credentials, activates
   `express-session`, and returns session-derived data previously produced no
