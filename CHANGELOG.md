@@ -72,6 +72,15 @@ All notable scanner, application, benchmark, and operational changes are recorde
   path, and passes non-graphical and X11/Xvfb startup. Its 72,568-byte
   executable has SHA-256
   `7e29d642169a6c218c249216c6c10648307aea88faf636b69ac25741104b4adf`.
+- Implementation checkpoint
+  `5f445bf876618f169af8f0ab39cc590bafbe3143` passes all 11 hosted workflow
+  families. Node `33457772156` passes all 92 jobs; container `33457772164`,
+  Windows GUI `33457772132`, Linux GUI `33457772150` attempt 2, Java
+  `33457772112`, Kotlin `33457772103`, .NET `33457772141`, Go `33457772343`,
+  Rust `33457772180`, Ruby `33457772128`, and PHP `33457772165` also pass. The
+  first Linux attempt passed non-graphical startup but its Xvfb smoke reached
+  the 20-second runner timeout; the unchanged retry passed, matching the local
+  X11 result.
 - Closed a measured Angular `HostListener("window:message")` false negative.
   The unchanged scanner emitted no structured row for an active Angular 20
   component that consumed `event.data` from the official global message

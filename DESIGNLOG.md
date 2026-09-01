@@ -101,8 +101,25 @@ path, and passes non-graphical plus X11/Xvfb startup. The inherited Windows
 `node.exe` path is deliberately rejected with `Exec format error` before that
 clean rerun. The 72,568-byte Linux executable has SHA-256
 `7e29d642169a6c218c249216c6c10648307aea88faf636b69ac25741104b4adf`.
-Hosted evidence follows the implementation checkpoint. The continuing scanner
-effectiveness goal remains active.
+**Hosted evidence.** Exact implementation checkpoint
+`5f445bf876618f169af8f0ab39cc590bafbe3143` passes every hosted workflow
+family: [Node `33457772156`](https://github.com/secwest/copilot-security/actions/runs/33457772156)
+with 92/92 jobs,
+[container `33457772164`](https://github.com/secwest/copilot-security/actions/runs/33457772164),
+[Windows GUI `33457772132`](https://github.com/secwest/copilot-security/actions/runs/33457772132),
+[Linux GUI `33457772150`](https://github.com/secwest/copilot-security/actions/runs/33457772150)
+on attempt 2,
+[Java `33457772112`](https://github.com/secwest/copilot-security/actions/runs/33457772112),
+[Kotlin `33457772103`](https://github.com/secwest/copilot-security/actions/runs/33457772103),
+[.NET `33457772141`](https://github.com/secwest/copilot-security/actions/runs/33457772141),
+[Go `33457772343`](https://github.com/secwest/copilot-security/actions/runs/33457772343),
+[Rust `33457772180`](https://github.com/secwest/copilot-security/actions/runs/33457772180),
+[Ruby `33457772128`](https://github.com/secwest/copilot-security/actions/runs/33457772128),
+and [PHP `33457772165`](https://github.com/secwest/copilot-security/actions/runs/33457772165).
+Linux attempt 1 passed non-graphical startup, then its Xvfb UI smoke reached the
+20-second runner timeout with exit 124. The unchanged retry passed, matching
+the local X11 result and identifying transient runner delay rather than a
+source change. The continuing scanner-effectiveness goal remains active.
 
 ## 2026-08-31 — Authenticate Angular global HostListener message senders
 
