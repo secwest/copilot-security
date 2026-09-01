@@ -39,8 +39,39 @@ plus the observed HTTP 400 produced `null` from the recovery adapter. After the
 narrow classification, the Copilot port and API event-finalization suites pass
 66/66 tests with 272 assertions at the native Windows filesystem boundary.
 TypeScript and generated-model checks and a clean production build also pass.
-A second real self-scan with the hardened executable is the next acceptance
-step; the scanner-effectiveness goal remains active.
+
+**Live closure.** A second tracked-only self-scan fixes its target at recovery
+checkpoint `f35788ee84da4daa2b41bee30d394ef3ebb56898` and snapshot digest
+`copilot-security-snapshot/v1:sha256:a70ec2fe2e4901346ed791a1febe07586ac109146078167e6c5c7e3d18ef3aa2`.
+One stored-credential `gpt-5.6-sol` high-reasoning session completes in 18m52s
+with complete coverage of all 11 authoritative surfaces, zero deferrals or
+open questions, and all 11 sealed artifact hashes independently verified. Its
+sole low CWE-1004 result is the intentionally selected vulnerable benchmark
+fixture; the topology-matched HttpOnly control and scanner/recovery code have
+no retained finding. The run accounts for 4,043,676 input tokens (3,212,518
+cached), 86,471 output tokens, 304.116585 Copilot AI credits, and a $9.1015815
+estimate. No retry, safety refusal, authentication, quota, credit-limit,
+rate-limit, or transport error occurs. The provider teardown did not recur, so
+the live run proves normal completion while the measured red/green regression
+proves the new teardown path. The account allowance is demonstrably not
+exhausted.
+
+All hosted workflows pass at the same exact checkpoint. Node run
+[`33479824132`](https://github.com/secwest/copilot-security/actions/runs/33479824132)
+passes 92/92 jobs; [container `33479824230`](https://github.com/secwest/copilot-security/actions/runs/33479824230),
+[Windows GUI `33479824188`](https://github.com/secwest/copilot-security/actions/runs/33479824188),
+[Linux GUI `33479824136`](https://github.com/secwest/copilot-security/actions/runs/33479824136),
+[.NET `33479824135`](https://github.com/secwest/copilot-security/actions/runs/33479824135),
+[Go `33479824219`](https://github.com/secwest/copilot-security/actions/runs/33479824219),
+[Java `33479824157`](https://github.com/secwest/copilot-security/actions/runs/33479824157),
+[Kotlin `33479824160`](https://github.com/secwest/copilot-security/actions/runs/33479824160),
+[PHP `33479824181`](https://github.com/secwest/copilot-security/actions/runs/33479824181),
+[Ruby `33479824204`](https://github.com/secwest/copilot-security/actions/runs/33479824204),
+and [Rust `33479824167`](https://github.com/secwest/copilot-security/actions/runs/33479824167)
+pass. The repository remains public on default branch `main`. Disposable local
+package and clone trees are removed after verification; the persistent
+scanner-owned self-scan artifacts remain under `copilot-security-home`. The
+scanner-effectiveness goal remains active.
 
 ## 2026-08-31 — Prove browser-readable signed Express cookies without conflating adjacent attributes
 
@@ -146,8 +177,8 @@ locked graph, builds with zero warnings/errors, passes those suites plus 2/2
 headless tests, and passes non-graphical and X11/Xvfb startup. Its 72,568-byte
 executable has SHA-256
 `7e29d642169a6c218c249216c6c10648307aea88faf636b69ac25741104b4adf`.
-Hosted and hardened self-scan closure remain the next checkpoints; the
-scanner-effectiveness goal remains active.
+Hosted and hardened self-scan closure are recorded in the recovery decision
+above; the scanner-effectiveness goal remains active.
 
 ## 2026-08-31 — Require live Fastify rate-limit activation at authentication verifiers
 

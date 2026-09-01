@@ -17,6 +17,22 @@ found` during provider resource teardown. A narrow 400/404 requested-resource
   port plus API event-finalization suites: 66 tests pass with 272 assertions at
   the native Windows filesystem boundary. This recovery path remains
   host-audited; valid draft filenames alone never establish completion.
+- A second exact-checkpoint `gpt-5.6-sol` high-reasoning self-scan completes in
+  18m52s with complete 11-surface coverage, zero deferrals or open questions,
+  and all 11 sealed artifact hashes independently verified. Its sole low
+  CWE-1004 finding is the intentionally selected readable-cookie benchmark;
+  the HttpOnly control and scanner/recovery code are clean. The scan used
+  4,043,676 input tokens (3,212,518 cached), 86,471 output tokens, and
+  304.116585 Copilot AI credits with a $9.1015815 estimate. It encountered no
+  retry, refusal, authentication, quota, credit-limit, rate-limit, or transport
+  error, confirming that the account allowance is not exhausted.
+- Exact recovery checkpoint `f35788ee84da4daa2b41bee30d394ef3ebb56898`
+  passes all hosted workflow families. Node run `33479824132` passes 92/92
+  jobs; container `33479824230`, Windows GUI `33479824188`, Linux GUI
+  `33479824136`, .NET `33479824135`, Go `33479824219`, Java `33479824157`,
+  Kotlin `33479824160`, PHP `33479824181`, Ruby `33479824204`, and Rust
+  `33479824167` pass. GitHub reports the repository public on default branch
+  `main`.
 - Closed a measured Express sensitive-cookie false negative. The unchanged
   scanner emitted no structured row when an Express session route placed an
   exact `jsonwebtoken.sign(...)` result in a credential-shaped response
