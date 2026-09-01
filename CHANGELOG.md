@@ -6,6 +6,38 @@ All notable scanner, application, benchmark, and operational changes are recorde
 
 ### Scanner effectiveness
 
+- Closed a measured Express sensitive-cookie false negative. The unchanged
+  scanner emitted no structured row when an Express session route placed an
+  exact `jsonwebtoken.sign(...)` result in a credential-shaped response
+  cookie whose options explicitly disabled `httpOnly`; the topology-matched
+  `httpOnly: true` control remained unreported. The focused red baseline was
+  two passes and six failures with zero model rows.
+- Added the bounded `node-express-sensitive-cookie-missing-httponly` model and
+  CWE-1004 evidence. It requires exact production Express 4 or 5 and
+  jsonwebtoken 8 or 9 dependencies, stable official bindings, a literal
+  application or Router route, a registered handler and exact response
+  identity, a literal credential-shaped cookie name, and an exact stable
+  `sign(...)` result written through `response.cookie(...)`.
+- Missing options, an absent `httpOnly` property, and final literal
+  `httpOnly: false` are reportable. Literal `true` suppresses the candidate;
+  dynamic values, spreads, shorthand or otherwise ambiguous options,
+  lookalikes, development-only dependencies, rebindings, dynamic names,
+  unsigned values, tests, and examples fail closed. `Secure` and `SameSite`
+  are recorded as transport and cross-site countercontrols without being
+  mistaken for JavaScript-read protection.
+- Added a pinned Express 5.2.1 and jsonwebtoken 9.0.3 exploit/control pair,
+  offline browser-visibility witnesses, and a specialized manifest with
+  perfect precision, recall, stability, narrative, and evidence gates. The
+  canonical corpus advances to 211 exploit/control pairs, 422 cases, and
+  1,266 repeated scan positions.
+- Eight focused tests now pass with 37 assertions after the measured red
+  baseline. They cover missing/false/true/dynamic options, stable option
+  bindings, trailing commas and multiline direct signing, application and
+  Router routes, ESM/CommonJS/import-equals/named imports, sensitive names,
+  signed-value provenance, dependency scope, path exclusion, reassignment,
+  countercontrol semantics, finding closure, and reviewer instructions.
+  Fifty-five adjacent Express and benchmark-integrity tests also pass with
+  3,004 assertions.
 - Closed a measured Fastify authentication-rate-limit false negative. The
   unchanged scanner emitted no structured row when a production login route
   passed `request.body.password` to `bcrypt.compare` behind an inert

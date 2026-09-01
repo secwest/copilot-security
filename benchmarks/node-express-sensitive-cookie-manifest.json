@@ -1,0 +1,82 @@
+{
+  "schemaVersion": "1.0",
+  "thresholds": {
+    "minCompletionRate": 1,
+    "minPrecision": 1,
+    "minRecall": 1,
+    "minF1": 1,
+    "minCasePassRate": 1,
+    "minNegativeCasePassRate": 1,
+    "minStableDetectionRate": 1,
+    "minValidationRate": 1,
+    "minAttackPathRate": 1,
+    "minCodeEvidenceRate": 1,
+    "minSeverityAccuracy": 1,
+    "maxFalsePositivesPerRun": 0
+  },
+  "cases": [
+    {
+      "id": "node-express-sensitive-cookie-readable",
+      "description": "An Express session route places a signed authentication token in a browser-readable __Host-session cookie with httpOnly disabled.",
+      "fixture": "fixtures/node-express-sensitive-cookie-readable",
+      "findingsPaths": [
+        "node-express-sensitive-cookie-readable/run-1/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "node-express-sensitive-cookie-missing-httponly",
+          "cwe": ["CWE-1004"],
+          "locations": [
+            {
+              "path": "src/server.js",
+              "startLine": 19,
+              "endLine": 19,
+              "lineTolerance": 1
+            }
+          ],
+          "acceptableSeverities": ["high", "medium", "low"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true,
+          "requiredValidationTextAnyOf": [
+            ["Express 5", "express@5.2.1", "Express application"],
+            ["POST /session", "/session route", "session route"],
+            ["jsonwebtoken", "jwt.sign", "signed authentication token"],
+            ["__Host-session", "session cookie", "authentication cookie"],
+            ["httpOnly: false", "HttpOnly disabled", "missing HttpOnly"],
+            ["document.cookie", "browser JavaScript", "script-readable"],
+            ["CWE-1004"]
+          ],
+          "requiredAttackPathTextAnyOf": [
+            ["script execution", "XSS prerequisite", "same-origin script"],
+            ["document.cookie", "browser JavaScript", "script-readable"],
+            ["__Host-session", "session value", "authentication token"],
+            ["HttpOnly", "httpOnly: false"],
+            ["in-memory", "no server", "no network request"]
+          ],
+          "forbiddenText": [
+            "the witness started Express",
+            "the witness sent a network request",
+            "the witness used a real token",
+            "proves an XSS vulnerability exists",
+            "proves the session was stolen",
+            "proves account takeover",
+            "proves the route is publicly reachable",
+            "every cookie is sensitive",
+            "Secure prevents JavaScript access",
+            "SameSite prevents JavaScript access"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "node-express-sensitive-cookie-httponly",
+      "description": "The topology-matched control sets HttpOnly on the same signed session cookie, excluding it from document.cookie.",
+      "fixture": "fixtures/node-express-sensitive-cookie-httponly",
+      "findingsPaths": [
+        "node-express-sensitive-cookie-httponly/run-1/findings.json"
+      ],
+      "expected": []
+    }
+  ]
+}

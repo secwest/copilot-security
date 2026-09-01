@@ -4705,6 +4705,21 @@ const NODE_EXPRESS_OPEN_REDIRECT_FIELD_EVIDENCE_REQUIREMENTS = [
   ["CWE-601", "open redirect", "URL redirection"],
 ] as const;
 
+const NODE_EXPRESS_SENSITIVE_COOKIE_FIELD_EVIDENCE_REQUIREMENTS = [
+  ["Express 4", "Express 5", "Express application", "Router"],
+  ["literal route", "POST /session", "registered handler"],
+  ["jsonwebtoken", "jwt.sign", "signed authentication token"],
+  ["response.cookie", "session cookie", "authentication cookie"],
+  ["httpOnly: false", "missing HttpOnly", "browser-readable cookie"],
+  ["document.cookie", "browser JavaScript", "same-origin script"],
+  [
+    "XSS prerequisite",
+    "script execution prerequisite",
+    "separate prerequisite",
+  ],
+  ["CWE-1004"],
+] as const;
+
 const NODE_FASTIFY_OPEN_REDIRECT_FIELD_EVIDENCE_REQUIREMENTS = [
   ["Fastify 5", "Fastify application", "route shorthand", "registered route"],
   [
@@ -4910,6 +4925,13 @@ const MODEL_SPECIFIC_FINDING_REQUIREMENTS: ReadonlyMap<
     {
       validation: NODE_EXPRESS_OPEN_REDIRECT_FIELD_EVIDENCE_REQUIREMENTS,
       attackPath: NODE_EXPRESS_OPEN_REDIRECT_FIELD_EVIDENCE_REQUIREMENTS,
+    },
+  ],
+  [
+    "node-express-sensitive-cookie-missing-httponly",
+    {
+      validation: NODE_EXPRESS_SENSITIVE_COOKIE_FIELD_EVIDENCE_REQUIREMENTS,
+      attackPath: NODE_EXPRESS_SENSITIVE_COOKIE_FIELD_EVIDENCE_REQUIREMENTS,
     },
   ],
   [
@@ -5287,6 +5309,7 @@ export async function buildResidualRiskInventory(
   records.push(...nodeContentfulMcpManagementTokenLeakRecords(sourceFiles));
   records.push(...nodeNextJsDynamicRouteAuthorizationRecords(sourceFiles));
   records.push(...nodeExpressOpenRedirectRecords(sourceFiles));
+  records.push(...nodeExpressSensitiveCookieRecords(sourceFiles));
   records.push(...nodeFastifyOpenRedirectRecords(sourceFiles));
   records.push(
     ...nodeFastifyAuthenticationMissingRateLimitRecords(sourceFiles),
@@ -25816,6 +25839,530 @@ function nodeExpressOpenRedirectRecords(
             });
             if (records.length >= MAX_FRAMEWORK_CROSS_FILE_RECORDS)
               return records;
+          }
+        }
+      }
+    }
+  }
+  return records;
+}
+
+interface NodeJsonWebTokenSignBinding {
+  dependency: NodeRuntimeDependency;
+  kind: "function" | "receiver";
+  line: number;
+  local: string;
+}
+
+interface NodeJsonWebTokenSignedValue {
+  binding: NodeJsonWebTokenSignBinding;
+  line: number;
+}
+
+interface NodeExpressCookieHttpOnlyState {
+  controls: Array<{ kind: string; line: number }>;
+  exposureKind:
+    | "explicitly-disabled-httponly"
+    | "missing-httponly-cookie-attribute";
+  line: number;
+}
+
+function nodeJsonWebTokenSignBindings(
+  files: readonly SourceFileSnapshot[],
+  file: SourceFileSnapshot,
+): NodeJsonWebTokenSignBinding[] {
+  const dependency = nodeRuntimeDependency(files, file.path, "jsonwebtoken");
+  const major = Number(dependency?.version.split(".")[0]);
+  if (
+    dependency === undefined ||
+    !Number.isSafeInteger(major) ||
+    (major !== 8 && major !== 9)
+  ) {
+    return [];
+  }
+  const bindings: NodeJsonWebTokenSignBinding[] = [];
+  const add = (
+    kind: NodeJsonWebTokenSignBinding["kind"],
+    local: string | undefined,
+    line: number,
+  ): void => {
+    if (
+      local !== undefined &&
+      !bindings.some(
+        (candidate) =>
+          candidate.kind === kind &&
+          candidate.local === local &&
+          candidate.line === line,
+      )
+    ) {
+      bindings.push({ dependency, kind, local, line });
+    }
+  };
+  const codeLines = javascriptCodeLinesWithoutComments(file.lines);
+  for (let index = 0; index < codeLines.length; index += 1) {
+    const code = codeLines[index] ?? "";
+    const receiver =
+      /^\s*import\s+([A-Za-z_$][\w$]*)\s+from\s+["']jsonwebtoken["']/u.exec(
+        code,
+      )?.[1] ??
+      /^\s*import\s+\*\s+as\s+([A-Za-z_$][\w$]*)\s+from\s+["']jsonwebtoken["']/u.exec(
+        code,
+      )?.[1] ??
+      /^\s*import\s+([A-Za-z_$][\w$]*)\s*=\s*require\s*\(\s*["']jsonwebtoken["']\s*\)/u.exec(
+        code,
+      )?.[1] ??
+      /^\s*(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*require\s*\(\s*["']jsonwebtoken["']\s*\)\s*;?\s*$/u.exec(
+        code,
+      )?.[1];
+    add("receiver", receiver, index + 1);
+    const direct =
+      /^\s*(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*require\s*\(\s*["']jsonwebtoken["']\s*\)\s*\.\s*sign\s*;?\s*$/u.exec(
+        code,
+      )?.[1];
+    add("function", direct, index + 1);
+  }
+  for (const imported of importedJavascriptSymbols(file.lines)) {
+    if (
+      imported.moduleSpecifier === "jsonwebtoken" &&
+      imported.imported === "sign"
+    ) {
+      add("function", imported.local, imported.line);
+    }
+  }
+  return bindings;
+}
+
+function nodeJsonWebTokenSignedValue(
+  file: SourceFileSnapshot,
+  expression: string,
+  sinkLine: number,
+  sinkEndLine: number,
+  handler: NodeExpressHandlerScope,
+  bindings: readonly NodeJsonWebTokenSignBinding[],
+): NodeJsonWebTokenSignedValue | undefined {
+  const value = expression.trim();
+  const identifier = /^[A-Za-z_$][\w$]*$/u.test(value) ? value : undefined;
+  const initializer =
+    identifier === undefined
+      ? undefined
+      : javascriptVariableInitializer(file.lines, identifier, sinkLine);
+  if (identifier !== undefined && initializer === undefined) return undefined;
+  const resolved = initializer ?? { line: sinkLine, value };
+  if (
+    resolved.line < handler.startLine ||
+    resolved.line > handler.endLine ||
+    (identifier !== undefined &&
+      javascriptIdentifierReassignedBetween(
+        file.lines,
+        identifier,
+        resolved.line,
+        sinkLine,
+      ))
+  ) {
+    return undefined;
+  }
+  const structural = javascriptStructuralLines(
+    resolved.value.split(/\r?\n/u),
+  ).join("\n");
+  for (const binding of bindings) {
+    const escaped = escapeRegularExpression(binding.local);
+    const callee =
+      binding.kind === "receiver" ? `${escaped}\\s*\\.\\s*sign` : escaped;
+    const call = new RegExp(`^\\s*(?:await\\s+)?(${callee})\\s*\\(`, "u").exec(
+      structural,
+    );
+    if (call === null) continue;
+    const open = structural.indexOf("(", call.index + call[0].length - 1);
+    const close = matchingCallParenthesis(structural, open);
+    if (
+      open < 0 ||
+      close < 0 ||
+      structural.slice(close + 1).trim() !== "" ||
+      binding.line >= resolved.line ||
+      handler.request === binding.local ||
+      handler.response === binding.local ||
+      javascriptIdentifierReassignedBetween(
+        file.lines,
+        binding.local,
+        binding.line,
+        sinkEndLine + 1,
+      )
+    ) {
+      continue;
+    }
+    if (
+      binding.kind === "receiver" &&
+      javascriptStructuralLines(
+        file.lines.slice(binding.line, Math.max(binding.line, sinkEndLine)),
+      ).some((line) =>
+        new RegExp(
+          `\\b${escaped}\\s*\\.\\s*sign\\s*(?:[+\\-*/%&|^?]?=(?!=|>)|\\+\\+|--)`,
+          "u",
+        ).test(line),
+      )
+    ) {
+      continue;
+    }
+    let line = resolved.line;
+    if (initializer === undefined) {
+      const actual = file.lines
+        .slice(sinkLine - 1, sinkEndLine)
+        .findIndex((candidate) =>
+          new RegExp(`\\b${callee}\\s*\\(`, "u").test(
+            javascriptStructuralCode(candidate),
+          ),
+        );
+      if (actual >= 0) line = sinkLine + actual;
+    } else {
+      line += structural.slice(0, call.index).match(/\n/gu)?.length ?? 0;
+    }
+    return { binding, line };
+  }
+  return undefined;
+}
+
+function nodeExpressSensitiveCookieName(value: string): boolean {
+  const normalized = value
+    .replace(/^__(?:Host|Secure)-/iu, "")
+    .toLocaleLowerCase("en-US");
+  return /^(?:access[._-]?token|auth(?:entication)?(?:[._-]?(?:session|token))?|connect[._-]?sid|id[._-]?token|jwt|refresh[._-]?token|session(?:[._-]?(?:id|token))?|sid|token)$/u.test(
+    normalized,
+  );
+}
+
+function nodeExpressCookieHttpOnlyState(
+  lines: readonly string[],
+  optionsExpression: string | undefined,
+  sinkLine: number,
+): NodeExpressCookieHttpOnlyState | undefined {
+  if (optionsExpression === undefined) {
+    return {
+      controls: [],
+      exposureKind: "missing-httponly-cookie-attribute",
+      line: sinkLine,
+    };
+  }
+  const options = resolveJavascriptExpression(
+    lines,
+    optionsExpression,
+    sinkLine,
+  );
+  if (
+    options === undefined ||
+    javascriptCompositePrefix(options.value, "{", "}") === undefined ||
+    javascriptStructuralLines(options.value.split(/\r?\n/u)).some((line) =>
+      /\.\.\./u.test(line),
+    )
+  ) {
+    return undefined;
+  }
+  const entries = javascriptObjectEntries(options);
+  const httpOnly = entries.filter((entry) => entry.key === "httpOnly").at(-1);
+  if (httpOnly !== undefined && httpOnly.value.trim() === "true") {
+    return undefined;
+  }
+  if (httpOnly !== undefined && httpOnly.value.trim() !== "false") {
+    return undefined;
+  }
+  const controls: Array<{ kind: string; line: number }> = [];
+  const secure = entries.filter((entry) => entry.key === "secure").at(-1);
+  if (secure?.value.trim() === "true") {
+    controls.push({ kind: "secure-cookie-attribute", line: secure.line });
+  }
+  const sameSite = entries.filter((entry) => entry.key === "sameSite").at(-1);
+  const sameSiteValue = nodeStaticString(sameSite?.value)?.toLocaleLowerCase(
+    "en-US",
+  );
+  if (["lax", "none", "strict"].includes(sameSiteValue ?? "")) {
+    controls.push({ kind: "samesite-cookie-attribute", line: sameSite!.line });
+  }
+  return {
+    controls,
+    exposureKind:
+      httpOnly === undefined
+        ? "missing-httponly-cookie-attribute"
+        : "explicitly-disabled-httponly",
+    line: httpOnly?.line ?? options.line,
+  };
+}
+
+function nodeExpressSensitiveCookieRecords(
+  files: readonly SourceFileSnapshot[],
+): ResidualRiskRecord[] {
+  const records: ResidualRiskRecord[] = [];
+  const emitted = new Set<string>();
+  for (const file of files) {
+    if (
+      !JAVASCRIPT_EXTENSIONS.has(file.extension) ||
+      javascriptTestOrExamplePath(file.path)
+    ) {
+      continue;
+    }
+    const expressDependency = nodeRuntimeDependency(
+      files,
+      file.path,
+      "express",
+    );
+    const expressMajor = Number(expressDependency?.version.split(".")[0]);
+    if (
+      expressDependency === undefined ||
+      (expressMajor !== 4 && expressMajor !== 5)
+    ) {
+      continue;
+    }
+    const signingBindings = nodeJsonWebTokenSignBindings(files, file);
+    if (signingBindings.length === 0) continue;
+    const factories = nodeExpressFactoryBindings(file.lines);
+    const structural = javascriptStructuralLines(file.lines).join("\n");
+    for (const instance of nodeExpressInstanceBindings(file.lines)) {
+      const factory = factories.find(
+        (candidate) => candidate.line === instance.factoryLine,
+      );
+      const escapedInstance = escapeRegularExpression(instance.local);
+      for (const method of [
+        "all",
+        "delete",
+        "get",
+        "head",
+        "options",
+        "patch",
+        "post",
+        "put",
+        "use",
+      ]) {
+        const routeMember = new RegExp(
+          `\\b${escapedInstance}\\s*\\.\\s*${method}\\s*\\(`,
+          "u",
+        );
+        for (const route of javascriptCallsInText(
+          file.text,
+          structural,
+          1,
+          routeMember,
+        )) {
+          const routePath = nodeStaticString(route.arguments[0]);
+          if (route.line <= instance.line || routePath === undefined) continue;
+          const routeEndLine =
+            1 + (structural.slice(0, route.close).match(/\n/gu)?.length ?? 0);
+          for (const handlerArgument of route.arguments.slice(1)) {
+            const inline = nodeExpressHandlerParameters(handlerArgument);
+            const named = /^[A-Za-z_$][\w$]*$/u.test(handlerArgument.trim())
+              ? nodeExpressNamedHandler(
+                  file.lines,
+                  handlerArgument.trim(),
+                  route.line,
+                )
+              : undefined;
+            const handler: NodeExpressHandlerScope | undefined =
+              inline === undefined
+                ? named
+                : {
+                    ...inline,
+                    endLine: routeEndLine,
+                    startLine: route.line,
+                  };
+            if (handler === undefined) continue;
+            if (
+              handler.symbol !== undefined &&
+              javascriptIdentifierReassignedBetween(
+                file.lines,
+                handler.symbol,
+                handler.startLine,
+                route.line,
+              )
+            ) {
+              continue;
+            }
+            const handlerLines = file.lines.slice(
+              handler.startLine - 1,
+              handler.endLine,
+            );
+            const handlerText = handlerLines.join("\n");
+            const handlerStructural =
+              javascriptStructuralLines(handlerLines).join("\n");
+            const escapedResponse = escapeRegularExpression(handler.response);
+            for (const cookie of javascriptCallsInText(
+              handlerText,
+              handlerStructural,
+              handler.startLine,
+              new RegExp(`\\b${escapedResponse}\\s*\\.\\s*cookie\\s*\\(`, "u"),
+            )) {
+              const cookieArguments = [...cookie.arguments];
+              if (cookieArguments.at(-1)?.trim() === "") {
+                cookieArguments.pop();
+              }
+              if (cookieArguments.length < 2 || cookieArguments.length > 3) {
+                continue;
+              }
+              const cookieName = nodeStaticString(cookieArguments[0]);
+              if (
+                cookieName === undefined ||
+                !nodeExpressSensitiveCookieName(cookieName)
+              ) {
+                continue;
+              }
+              const cookieEndLine =
+                handler.startLine +
+                (handlerStructural.slice(0, cookie.close).match(/\n/gu)
+                  ?.length ?? 0);
+              const httpOnly = nodeExpressCookieHttpOnlyState(
+                file.lines,
+                cookieArguments[2],
+                cookie.line,
+              );
+              if (httpOnly === undefined) continue;
+              const signed = nodeJsonWebTokenSignedValue(
+                file,
+                cookieArguments[1]!,
+                cookie.line,
+                cookieEndLine,
+                handler,
+                signingBindings,
+              );
+              if (signed === undefined) continue;
+              const prefix = handlerStructural.slice(0, cookie.start);
+              const factoryLocal = factory?.local;
+              if (
+                nodeExpressBindingAssignedInText(prefix, handler.response) ||
+                new RegExp(
+                  `\\b${escapedResponse}\\s*\\.\\s*cookie\\s*=`,
+                  "u",
+                ).test(prefix) ||
+                javascriptIdentifierReassignedBetween(
+                  file.lines,
+                  handler.response,
+                  handler.startLine,
+                  cookieEndLine + 1,
+                ) ||
+                javascriptIdentifierReassignedBetween(
+                  file.lines,
+                  instance.local,
+                  instance.line,
+                  cookieEndLine + 1,
+                ) ||
+                (factoryLocal !== undefined &&
+                  javascriptIdentifierReassignedBetween(
+                    file.lines,
+                    factoryLocal,
+                    factory!.line,
+                    cookieEndLine + 1,
+                  )) ||
+                file.lines
+                  .slice(instance.line, route.line - 1)
+                  .some((line) =>
+                    new RegExp(
+                      `\\b${escapedInstance}\\s*\\.\\s*${method}\\s*=`,
+                      "u",
+                    ).test(javascriptCodeBeforeComment(line)),
+                  )
+              ) {
+                continue;
+              }
+              const key = `${file.path}\0${route.line}\0${signed.line}\0${cookie.line}`;
+              if (emitted.has(key)) continue;
+              emitted.add(key);
+              const startLine = Math.max(1, cookie.line - CONTEXT_LINES_BEFORE);
+              const endLine = Math.min(
+                file.lines.length,
+                cookie.line + CONTEXT_LINES_AFTER,
+              );
+              records.push({
+                path: file.path,
+                line: cookie.line,
+                categories: [
+                  "framework-dataflow:node-express-sensitive-cookie-missing-httponly",
+                  "modeled-source:jsonwebtoken-signed-authentication-token",
+                  "modeled-sink:express-browser-readable-sensitive-cookie",
+                ],
+                priority: 115,
+                startLine,
+                endLine,
+                excerpt: sourceExcerpt(file.lines, startLine, endLine),
+                sourceExcerpt: sourceExcerpt(
+                  file.lines,
+                  Math.max(1, signed.line - 1),
+                  Math.min(file.lines.length, signed.line + 1),
+                ),
+                frameworkModel: {
+                  schemaVersion: "1.2",
+                  id: "node-express-sensitive-cookie-missing-httponly",
+                  language: "javascript-typescript",
+                  scope: "same-file",
+                  source: {
+                    kind: "jsonwebtoken-signed-authentication-token",
+                    path: file.path,
+                    line: signed.line,
+                  },
+                  sink: {
+                    kind: "express-browser-readable-sensitive-cookie",
+                    path: file.path,
+                    line: cookie.line,
+                    cweIds: ["CWE-1004"],
+                  },
+                  propagators: [
+                    {
+                      kind: `express-${instance.kind}-factory-binding`,
+                      path: file.path,
+                      line: instance.factoryLine,
+                      symbol: instance.local,
+                    },
+                    {
+                      kind: "express-literal-session-route",
+                      path: file.path,
+                      line: route.line,
+                      symbol: `${method.toUpperCase()} ${routePath}`,
+                    },
+                    {
+                      kind: "express-handler-request-response-binding",
+                      path: file.path,
+                      line: handler.startLine,
+                      symbol: `${handler.request},${handler.response}`,
+                    },
+                    {
+                      kind: "jsonwebtoken-sign-binding",
+                      path: file.path,
+                      line: signed.binding.line,
+                      symbol:
+                        signed.binding.kind === "receiver"
+                          ? `${signed.binding.local}.sign`
+                          : signed.binding.local,
+                    },
+                    {
+                      kind: "jsonwebtoken-runtime-dependency",
+                      path: signed.binding.dependency.manifestPath,
+                      line: signed.binding.dependency.line,
+                      symbol: `jsonwebtoken@${signed.binding.dependency.version}:${signed.binding.dependency.proof}`,
+                    },
+                    {
+                      kind: "express-runtime-dependency",
+                      path: expressDependency.manifestPath,
+                      line: expressDependency.line,
+                      symbol: `express@${expressDependency.version}:${expressDependency.proof}`,
+                    },
+                    {
+                      kind: "sensitive-response-cookie-name",
+                      path: file.path,
+                      line: cookie.line,
+                      symbol: cookieName,
+                    },
+                  ],
+                  candidateControls: [
+                    {
+                      kind: httpOnly.exposureKind,
+                      path: file.path,
+                      line: httpOnly.line,
+                    },
+                    ...httpOnly.controls.map((control) => ({
+                      ...control,
+                      path: file.path,
+                    })),
+                  ],
+                },
+              });
+              if (records.length >= MAX_FRAMEWORK_CROSS_FILE_RECORDS) {
+                return records;
+              }
+            }
           }
         }
       }

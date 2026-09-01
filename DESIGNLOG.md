@@ -2,6 +2,90 @@
 
 This log records consequential implementation decisions, their evidence, and the tradeoffs that future scanner work must preserve.
 
+## 2026-08-31 — Prove browser-readable signed Express cookies without conflating adjacent attributes
+
+**Measured gap and maintained comparator.** A production Express session
+route created an authentication value with `jsonwebtoken.sign(...)` and wrote
+it to a credential-shaped response cookie with `httpOnly: false`. The
+unchanged scanner emitted no specialized row, while the same topology with
+`httpOnly: true` correctly needed to remain silent. The focused red baseline
+was two passes and six failures with zero model rows. CodeQL's high-precision
+[`js/client-exposed-cookie`](https://codeql.github.com/codeql-query-help/javascript/js-client-exposed-cookie/)
+query reports sensitive server-side cookie writes that are not HttpOnly, and
+its maintained
+[`ClientExposedCookie.ql`](https://github.com/github/codeql/blob/main/javascript/ql/src/Security/CWE-1004/ClientExposedCookie.ql)
+expresses the same three essential predicates: sensitive data, server-side
+write, and absent HttpOnly protection. The official
+[`CookieWrite` library contract](https://codeql.github.com/codeql-standard-libraries/javascript/semmle/javascript/frameworks/CookieLibraries.qll/type.CookieLibraries%24CookieWrites%24CookieWrite.html)
+defines the cookie-write abstraction. Express documents the
+[`res.cookie` API](https://expressjs.com/en/api/), and MDN documents
+[`HttpOnly`](https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Set-Cookie)
+as the attribute that prevents JavaScript access to cookie values.
+
+**Typed decision.** Emit
+`node-express-sensitive-cookie-missing-httponly` only when the scanner can
+prove all relevant identities in one production JavaScript or TypeScript
+file. Require exact runtime Express 4 or 5 and jsonwebtoken 8 or 9
+dependencies; stable official ESM, import-equals, or CommonJS bindings; a
+stable Express application or Router; a literal registered route and inline
+or named handler; the handler's exact response parameter; a literal
+credential-shaped cookie name; and a direct or stable local result of the
+official jsonwebtoken `sign` function written through `response.cookie`.
+Record the signing call, route, cookie sink, dependency versions, handler
+identity, sensitive name, and option state as structured evidence.
+
+**HttpOnly and adjacent-control semantics.** Omitted cookie options, an exact
+object without `httpOnly`, or the final exact property value `false` are
+reportable. A final literal `true` suppresses the candidate. Dynamic values,
+shorthand, spreads, non-object option expressions, and unresolved bindings
+fail closed because their final runtime value is not statically proven.
+Literal `secure: true` and recognized literal `sameSite` modes are retained as
+candidate controls: they constrain transport or cross-site attachment, but
+neither makes a same-origin script unable to read a cookie. A trailing comma
+is normalized only at this Express call boundary so multiline modern
+JavaScript remains analyzable without changing the shared call parser.
+
+**Precision improvement and deliberate bounds.** The comparator's abstract
+sensitivity predicate is narrowed here to credential-shaped literal cookie
+names carrying an exact jsonwebtoken signing result. That produces concrete
+route-to-cookie evidence and rejects theme/preference cookies, arbitrary
+cookie values, dynamic names, local package lookalikes, development-only
+dependencies, unsigned values, unregistered handlers, rebound factories,
+applications, response parameters or signing functions, overwritten cookie
+methods, tests, and examples. The current model is deliberately same-file and
+does not infer framework identity through custom wrappers, cross-file service
+layers, middleware aliases, non-jsonwebtoken token implementations, or
+configuration assembled dynamically. Those remain reviewer surfaces until
+equally strict provenance and final-value proof can be added.
+
+**Reviewer and attack-path contract.** Validation must reopen the source and
+name the exact Express/jsonwebtoken versions, route, signing call, literal
+cookie name, options object, and final HttpOnly state. It must explain that
+JavaScript readability is the missing boundary, identify CWE-1004, and treat
+an attacker-controlled same-origin script or XSS as a separate prerequisite.
+`Secure`, `SameSite`, signed contents, and cookie prefixes must not be
+described as HttpOnly equivalents. The static row alone does not prove XSS,
+public reachability, possession of a real credential, session acceptance,
+account takeover, or successful exfiltration. Review must separately inspect
+cookie path/domain, expiry, rotation, logout and revocation, token claims and
+verification, CSP and other script-execution controls, and whether the value
+actually authorizes sensitive actions.
+
+**Benchmark and regression evidence.** The paired fixtures pin Express 5.2.1
+and jsonwebtoken 9.0.3 and differ at the HttpOnly boundary. Offline witnesses
+model browser visibility from their emitted cookie attributes: the exploit
+exposes one modeled session value through `document.cookie`, while the
+HttpOnly control exposes none. No server starts, no network request is sent,
+and no real credential is created or read. The specialized manifest enforces
+perfect positive, negative, stability, narrative, and code-evidence gates.
+Eight focused tests pass with 37 assertions after the two-pass/six-failure red
+baseline, including multiline direct signing with a trailing comma. Fifty-five
+adjacent Express, corpus-pairing, and evaluator tests pass with 3,004
+assertions. The canonical corpus now contains 211 exploit/control pairs, 422
+cases, and 1,266 repeated scan positions. Full packaging, self-scan, desktop,
+and hosted acceptance remains the next checkpoint; the scanner-effectiveness
+goal remains active.
+
 ## 2026-08-31 — Require live Fastify rate-limit activation at authentication verifiers
 
 **Measured gap and comparator.** A production Fastify 5 login route read
