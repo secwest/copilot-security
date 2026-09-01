@@ -36,6 +36,29 @@ intentional platform skip, zero failures, and 1,429 assertions. Two independent
 and strict isolated installation validates the public package. The
 scanner-effectiveness goal remains active.
 
+**The immutable retry scan closes.** Build a new tracked-only archive of exact
+checkpoint `0c45984d17fdde8242dd655b92b070920d577736` rather than reusing the
+failed output or a mutable working tree. The archive contains 4,205 files, its
+29 selected paths exactly equal the change set since the prior remediation,
+and its SHA-256 is
+`9a050fd2ae013cc252ee86c5e66996369c9077ef04ecb3f1ab8e911f607d44f4`.
+Stored credentials select `gpt-5.6-sol`, high reasoning, deep mode, five total
+session attempts, and no AI-credit or cost ceiling. After a retryable end with
+all drafts present, isolated session 2/5 resumes host-audited quality correction
+and completes the scan in 17m34s.
+
+The final contract contains zero findings, `complete` coverage, 29 surfaces
+that exactly match all 29 immutable inventory rows, 29 `no_issue_found`
+dispositions, and no deferred work. All seven sealed artifact hashes match
+independent calculations. Finalization rejects one draft JWT finding because
+two code-evidence items do not match repository bytes. Retain that fail-closed
+decision: semantic plausibility is not permission to repair or accept invented
+evidence, while the paired deterministic JWT benchmark remains the controlled
+recall measurement. The scan uses 5,468,302 input tokens (5,109,366 cached),
+48,578 output tokens, and an estimated $6.25168675. It encounters no
+authentication, quota, credit-limit, rate-limit, or terminal classifier failure.
+The scanner-effectiveness goal remains active.
+
 ## 2026-09-01 — Recover persistent classifier refusal across isolated sessions
 
 **The observed failure was neither quota nor authentication.** A deep scan of
