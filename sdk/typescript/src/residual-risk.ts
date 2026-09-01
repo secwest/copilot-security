@@ -4720,6 +4720,17 @@ const NODE_EXPRESS_SENSITIVE_COOKIE_FIELD_EVIDENCE_REQUIREMENTS = [
   ["CWE-1004"],
 ] as const;
 
+const NODE_EXPRESS_SENSITIVE_COOKIE_SECURE_FIELD_EVIDENCE_REQUIREMENTS = [
+  ["Express 4", "Express 5", "Express application", "Router"],
+  ["literal route", "POST /session", "registered handler"],
+  ["jsonwebtoken", "jwt.sign", "signed authentication token"],
+  ["response.cookie", "session cookie", "authentication cookie"],
+  ["secure: false", "missing Secure", "cleartext cookie"],
+  ["HTTP", "unencrypted transport", "network interception"],
+  ["HTTPS deployment", "HTTP reachability", "transport prerequisite"],
+  ["CWE-614", "CWE-319", "clear text transmission"],
+] as const;
+
 const NODE_FASTIFY_OPEN_REDIRECT_FIELD_EVIDENCE_REQUIREMENTS = [
   ["Fastify 5", "Fastify application", "route shorthand", "registered route"],
   [
@@ -4932,6 +4943,15 @@ const MODEL_SPECIFIC_FINDING_REQUIREMENTS: ReadonlyMap<
     {
       validation: NODE_EXPRESS_SENSITIVE_COOKIE_FIELD_EVIDENCE_REQUIREMENTS,
       attackPath: NODE_EXPRESS_SENSITIVE_COOKIE_FIELD_EVIDENCE_REQUIREMENTS,
+    },
+  ],
+  [
+    "node-express-sensitive-cookie-missing-secure",
+    {
+      validation:
+        NODE_EXPRESS_SENSITIVE_COOKIE_SECURE_FIELD_EVIDENCE_REQUIREMENTS,
+      attackPath:
+        NODE_EXPRESS_SENSITIVE_COOKIE_SECURE_FIELD_EVIDENCE_REQUIREMENTS,
     },
   ],
   [
@@ -25867,6 +25887,14 @@ interface NodeExpressCookieHttpOnlyState {
   line: number;
 }
 
+interface NodeExpressCookieSecureState {
+  controls: Array<{ kind: string; line: number }>;
+  exposureKind:
+    | "explicitly-disabled-secure"
+    | "missing-secure-cookie-attribute";
+  line: number;
+}
+
 function nodeJsonWebTokenSignBindings(
   files: readonly SourceFileSnapshot[],
   file: SourceFileSnapshot,
@@ -26086,6 +26114,92 @@ function nodeExpressCookieHttpOnlyState(
   };
 }
 
+function nodeExpressCookieSecureState(
+  lines: readonly string[],
+  optionsExpression: string | undefined,
+  sinkLine: number,
+  cookieName: string,
+): NodeExpressCookieSecureState | undefined {
+  // Conforming browsers reject these prefixed cookies unless Secure is set, so
+  // absence of the flag is not evidence that the cookie travels in cleartext.
+  if (/^__(?:Host|Secure)-/iu.test(cookieName)) return undefined;
+  if (optionsExpression === undefined) {
+    return {
+      controls: [],
+      exposureKind: "missing-secure-cookie-attribute",
+      line: sinkLine,
+    };
+  }
+  const options = resolveJavascriptExpression(
+    lines,
+    optionsExpression,
+    sinkLine,
+  );
+  if (
+    options === undefined ||
+    javascriptCompositePrefix(options.value, "{", "}") === undefined ||
+    javascriptStructuralLines(options.value.split(/\r?\n/u)).some((line) =>
+      /\.\.\./u.test(line),
+    )
+  ) {
+    return undefined;
+  }
+  const entries = javascriptObjectEntries(options);
+  const secure = entries.filter((entry) => entry.key === "secure").at(-1);
+  if (secure !== undefined && secure.value.trim() === "true") {
+    return undefined;
+  }
+  if (secure !== undefined && secure.value.trim() !== "false") {
+    return undefined;
+  }
+  const sameSite = entries.filter((entry) => entry.key === "sameSite").at(-1);
+  const sameSiteValue = nodeStaticString(sameSite?.value)?.toLocaleLowerCase(
+    "en-US",
+  );
+  const partitioned = entries
+    .filter((entry) => entry.key === "partitioned")
+    .at(-1);
+  // Modern browsers reject SameSite=None and Partitioned cookies that omit
+  // Secure. Excluding them keeps this model about transmitted cleartext, not
+  // cookie-delivery failures.
+  if (sameSiteValue === "none" || partitioned?.value.trim() === "true") {
+    return undefined;
+  }
+  if (
+    (sameSite !== undefined &&
+      sameSite.value.trim() !== "true" &&
+      sameSite.value.trim() !== "false" &&
+      sameSiteValue !== "lax" &&
+      sameSiteValue !== "strict") ||
+    (partitioned !== undefined &&
+      partitioned.value.trim() !== "true" &&
+      partitioned.value.trim() !== "false")
+  ) {
+    return undefined;
+  }
+  const controls: Array<{ kind: string; line: number }> = [];
+  const httpOnly = entries.filter((entry) => entry.key === "httpOnly").at(-1);
+  if (httpOnly?.value.trim() === "true") {
+    controls.push({ kind: "httponly-cookie-attribute", line: httpOnly.line });
+  }
+  if (
+    sameSite !== undefined &&
+    (sameSiteValue === "lax" ||
+      sameSiteValue === "strict" ||
+      sameSite.value.trim() === "true")
+  ) {
+    controls.push({ kind: "samesite-cookie-attribute", line: sameSite.line });
+  }
+  return {
+    controls,
+    exposureKind:
+      secure === undefined
+        ? "missing-secure-cookie-attribute"
+        : "explicitly-disabled-secure",
+    line: secure?.line ?? options.line,
+  };
+}
+
 function nodeExpressSensitiveCookieRecords(
   files: readonly SourceFileSnapshot[],
 ): ResidualRiskRecord[] {
@@ -26210,7 +26324,13 @@ function nodeExpressSensitiveCookieRecords(
                 cookieArguments[2],
                 cookie.line,
               );
-              if (httpOnly === undefined) continue;
+              const secure = nodeExpressCookieSecureState(
+                file.lines,
+                cookieArguments[2],
+                cookie.line,
+                cookieName,
+              );
+              if (httpOnly === undefined && secure === undefined) continue;
               const signed = nodeJsonWebTokenSignedValue(
                 file,
                 cookieArguments[1]!,
@@ -26258,107 +26378,143 @@ function nodeExpressSensitiveCookieRecords(
               ) {
                 continue;
               }
-              const key = `${file.path}\0${route.line}\0${signed.line}\0${cookie.line}`;
-              if (emitted.has(key)) continue;
-              emitted.add(key);
               const startLine = Math.max(1, cookie.line - CONTEXT_LINES_BEFORE);
               const endLine = Math.min(
                 file.lines.length,
                 cookie.line + CONTEXT_LINES_AFTER,
               );
-              records.push({
-                path: file.path,
-                line: cookie.line,
-                categories: [
-                  "framework-dataflow:node-express-sensitive-cookie-missing-httponly",
-                  "modeled-source:jsonwebtoken-signed-authentication-token",
-                  "modeled-sink:express-browser-readable-sensitive-cookie",
-                ],
-                priority: 115,
-                startLine,
-                endLine,
-                excerpt: sourceExcerpt(file.lines, startLine, endLine),
-                sourceExcerpt: sourceExcerpt(
-                  file.lines,
-                  Math.max(1, signed.line - 1),
-                  Math.min(file.lines.length, signed.line + 1),
-                ),
-                frameworkModel: {
-                  schemaVersion: "1.2",
-                  id: "node-express-sensitive-cookie-missing-httponly",
-                  language: "javascript-typescript",
-                  scope: "same-file",
-                  source: {
-                    kind: "jsonwebtoken-signed-authentication-token",
-                    path: file.path,
-                    line: signed.line,
-                  },
-                  sink: {
-                    kind: "express-browser-readable-sensitive-cookie",
-                    path: file.path,
-                    line: cookie.line,
-                    cweIds: ["CWE-1004"],
-                  },
-                  propagators: [
-                    {
-                      kind: `express-${instance.kind}-factory-binding`,
+              const emitCookieRecord = (
+                id: string,
+                sinkKind: string,
+                cweIds: string[],
+                modeledSink: string,
+                priority: number,
+                state:
+                  | NodeExpressCookieHttpOnlyState
+                  | NodeExpressCookieSecureState,
+              ): void => {
+                const key = `${id}\0${file.path}\0${route.line}\0${signed.line}\0${cookie.line}`;
+                if (
+                  emitted.has(key) ||
+                  records.length >= MAX_FRAMEWORK_CROSS_FILE_RECORDS
+                ) {
+                  return;
+                }
+                emitted.add(key);
+                records.push({
+                  path: file.path,
+                  line: cookie.line,
+                  categories: [
+                    `framework-dataflow:${id}`,
+                    "modeled-source:jsonwebtoken-signed-authentication-token",
+                    `modeled-sink:${modeledSink}`,
+                  ],
+                  priority,
+                  startLine,
+                  endLine,
+                  excerpt: sourceExcerpt(file.lines, startLine, endLine),
+                  sourceExcerpt: sourceExcerpt(
+                    file.lines,
+                    Math.max(1, signed.line - 1),
+                    Math.min(file.lines.length, signed.line + 1),
+                  ),
+                  frameworkModel: {
+                    schemaVersion: "1.2",
+                    id,
+                    language: "javascript-typescript",
+                    scope: "same-file",
+                    source: {
+                      kind: "jsonwebtoken-signed-authentication-token",
                       path: file.path,
-                      line: instance.factoryLine,
-                      symbol: instance.local,
+                      line: signed.line,
                     },
-                    {
-                      kind: "express-literal-session-route",
-                      path: file.path,
-                      line: route.line,
-                      symbol: `${method.toUpperCase()} ${routePath}`,
-                    },
-                    {
-                      kind: "express-handler-request-response-binding",
-                      path: file.path,
-                      line: handler.startLine,
-                      symbol: `${handler.request},${handler.response}`,
-                    },
-                    {
-                      kind: "jsonwebtoken-sign-binding",
-                      path: file.path,
-                      line: signed.binding.line,
-                      symbol:
-                        signed.binding.kind === "receiver"
-                          ? `${signed.binding.local}.sign`
-                          : signed.binding.local,
-                    },
-                    {
-                      kind: "jsonwebtoken-runtime-dependency",
-                      path: signed.binding.dependency.manifestPath,
-                      line: signed.binding.dependency.line,
-                      symbol: `jsonwebtoken@${signed.binding.dependency.version}:${signed.binding.dependency.proof}`,
-                    },
-                    {
-                      kind: "express-runtime-dependency",
-                      path: expressDependency.manifestPath,
-                      line: expressDependency.line,
-                      symbol: `express@${expressDependency.version}:${expressDependency.proof}`,
-                    },
-                    {
-                      kind: "sensitive-response-cookie-name",
+                    sink: {
+                      kind: sinkKind,
                       path: file.path,
                       line: cookie.line,
-                      symbol: cookieName,
+                      cweIds,
                     },
-                  ],
-                  candidateControls: [
-                    {
-                      kind: httpOnly.exposureKind,
-                      path: file.path,
-                      line: httpOnly.line,
-                    },
-                    ...httpOnly.controls.map((control) => ({
-                      ...control,
-                      path: file.path,
-                    })),
-                  ],
-                },
-              });
+                    propagators: [
+                      {
+                        kind: `express-${instance.kind}-factory-binding`,
+                        path: file.path,
+                        line: instance.factoryLine,
+                        symbol: instance.local,
+                      },
+                      {
+                        kind: "express-literal-session-route",
+                        path: file.path,
+                        line: route.line,
+                        symbol: `${method.toUpperCase()} ${routePath}`,
+                      },
+                      {
+                        kind: "express-handler-request-response-binding",
+                        path: file.path,
+                        line: handler.startLine,
+                        symbol: `${handler.request},${handler.response}`,
+                      },
+                      {
+                        kind: "jsonwebtoken-sign-binding",
+                        path: file.path,
+                        line: signed.binding.line,
+                        symbol:
+                          signed.binding.kind === "receiver"
+                            ? `${signed.binding.local}.sign`
+                            : signed.binding.local,
+                      },
+                      {
+                        kind: "jsonwebtoken-runtime-dependency",
+                        path: signed.binding.dependency.manifestPath,
+                        line: signed.binding.dependency.line,
+                        symbol: `jsonwebtoken@${signed.binding.dependency.version}:${signed.binding.dependency.proof}`,
+                      },
+                      {
+                        kind: "express-runtime-dependency",
+                        path: expressDependency.manifestPath,
+                        line: expressDependency.line,
+                        symbol: `express@${expressDependency.version}:${expressDependency.proof}`,
+                      },
+                      {
+                        kind: "sensitive-response-cookie-name",
+                        path: file.path,
+                        line: cookie.line,
+                        symbol: cookieName,
+                      },
+                    ],
+                    candidateControls: [
+                      {
+                        kind: state.exposureKind,
+                        path: file.path,
+                        line: state.line,
+                      },
+                      ...state.controls.map((control) => ({
+                        ...control,
+                        path: file.path,
+                      })),
+                    ],
+                  },
+                });
+              };
+              if (httpOnly !== undefined) {
+                emitCookieRecord(
+                  "node-express-sensitive-cookie-missing-httponly",
+                  "express-browser-readable-sensitive-cookie",
+                  ["CWE-1004"],
+                  "express-browser-readable-sensitive-cookie",
+                  115,
+                  httpOnly,
+                );
+              }
+              if (secure !== undefined) {
+                emitCookieRecord(
+                  "node-express-sensitive-cookie-missing-secure",
+                  "express-cleartext-sensitive-cookie",
+                  ["CWE-614", "CWE-319"],
+                  "express-cleartext-sensitive-cookie",
+                  116,
+                  secure,
+                );
+              }
               if (records.length >= MAX_FRAMEWORK_CROSS_FILE_RECORDS) {
                 return records;
               }

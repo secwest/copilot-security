@@ -2,6 +2,95 @@
 
 This log records consequential implementation decisions, their evidence, and the tradeoffs that future scanner work must preserve.
 
+## 2026-09-01 — Prove cleartext-capable signed Express cookies without conflating adjacent controls
+
+**Measured gap and maintained comparator.** A production-shaped Express 5
+session route created an authentication value with `jsonwebtoken.sign(...)`
+and wrote it to a literal `session` response cookie with `httpOnly: true`,
+`sameSite: "lax"`, and `secure: false`. The unchanged scanner emitted no
+specialized transport row. The source-identical `secure: true` control also
+remained silent, so the focused test began red with zero records where one was
+required. CodeQL's default, high-precision
+[`js/clear-text-cookie`](https://codeql.github.com/codeql-query-help/javascript/js-clear-text-cookie/)
+query reports sensitive cookies that can travel without SSL and classifies the
+boundary as CWE-614, CWE-311, CWE-312, and CWE-319. The current IETF HTTP cookie
+draft defines Secure as the secure-channel retrieval restriction and requires
+user agents to reject SameSite=None and case-insensitive `__Secure-` or
+`__Host-` cookies that do not satisfy their Secure constraints:
+[`draft-ietf-httpbis-rfc6265bis-22`](https://datatracker.ietf.org/doc/html/draft-ietf-httpbis-rfc6265bis).
+
+**Shared proof, independent attribute decision.** Extend the existing bounded
+Express sensitive-cookie analysis rather than introduce a second lexical
+scanner. The host proves exact production Express 4 or 5 and jsonwebtoken 8 or
+9 dependencies; stable official factory, application or Router, signing, and
+response identities; one literal registered route and handler; a literal
+credential-shaped cookie name; and an exact live `sign(...)` result reaching
+`response.cookie(...)`. Only after that common identity and dataflow proof does
+the host evaluate HttpOnly and Secure independently. A dynamic HttpOnly value
+does not hide a statically false Secure value, and an exact HttpOnly control is
+preserved as reviewer evidence without being treated as encryption.
+
+**Secure final-value semantics.** No options argument, an exact spread-free
+object without `secure`, or a final exact `secure: false` property produces
+`node-express-sensitive-cookie-missing-secure`. A final literal `true`
+suppresses it. Dynamic values, shorthand, computed or non-object options,
+spreads, and unresolved option bindings fail closed because their final runtime
+value is not proven. Duplicate literal properties follow JavaScript's final
+value: true-then-false is reportable and false-then-true is controlled. The
+sink is `express-cleartext-sensitive-cookie` with CWE-614 and CWE-319; the model
+does not claim that the signed token itself is unencrypted at rest or that
+transport interception has occurred.
+
+**Browser rejection is not cleartext transmission.** Suppress exact cookie
+names beginning with any case variation of `__Host-` or `__Secure-` when the
+Secure requirement is not met. Also suppress exact `SameSite=None` and
+`partitioned: true` forms without Secure. In these cases, a conforming browser
+rejects cookie storage instead of attaching the cookie to an unencrypted
+request; reporting cleartext transmission would turn a delivery failure into a
+false positive. Literal HttpOnly and Lax/Strict SameSite attributes remain
+candidate controls because they constrain script access and cross-site
+attachment, respectively, but neither supplies transport confidentiality.
+
+**Reviewer and attack-path contract.** Reopen the route, handler, response,
+signing call, dependency versions, literal cookie name, exact options, and final
+Secure state. Validation and attack-path prose must name the HTTP cleartext
+boundary and CWE-614 or CWE-319, preserve HttpOnly and SameSite semantics, and
+treat an HTTP-reachable deployment plus an on-path observer as separate
+prerequisites. Review proxy TLS termination, HTTP redirects, HSTS and first
+visits, domain/path scope, session duration and revocation, victim
+authentication, and whether an intercepted value authorizes anything. The
+static row does not prove public HTTP reachability, interception, session
+theft, account takeover, or host compromise.
+
+**Benchmark and regression evidence.** The paired fixtures pin Express 5.2.1
+and jsonwebtoken 9.0.3 and differ only at `secure: false` versus `secure: true`.
+Their offline witnesses serialize inert cookie attributes in memory: the
+vulnerable form permits modeled HTTP transport, while the control includes
+`Secure` and does not. Neither witness starts Express or a listener, performs a
+request, nor reads or creates a real credential or signing key. The specialized
+manifest requires exact source/sink evidence, both CWEs, deployment
+prerequisites, adjacent-control semantics, and bounded claims; the pair is also
+part of the canonical three-run corpus. The new and original cookie tests plus
+the canonical benchmark pass 32/32 with 2,985 assertions. Adjacent framework
+and residual-risk tests pass 86 with two intentional platform skips and 1,149
+assertions. TypeScript and generated-model checks pass. The scanner-
+effectiveness goal remains active.
+
+**Complete local acceptance.** The corrected Windows aggregate exercises all
+2,318 cases across 226 files in 955.79 seconds: 2,285 pass, 31 intentional
+platform or real-service skips remain, and only the established Git fixture
+ownership and private scanner-home operations are denied by the managed
+filesystem. Rerunning exactly those two files under native Windows permissions
+passes 48/48 with 244 assertions. Formatting, generated-model drift,
+TypeScript, a clean production build, and the live production advisory audit
+pass. Two independent npm pack operations produce byte-identical 299-entry,
+2,529,161-byte archives with SHA-256
+`84a2a57f84ad57101a8c4efcb2363b133043e4a32c3b7d82caf60ead3c4f1f26`;
+strict isolated installation validates 67 production packages, the public
+import, executable CLI, and all 79 bundled plugin files. The canonical corpus
+now contains 212 exploit/control pairs, 424 cases, and 1,272 repeated scan
+positions.
+
 ## 2026-08-31 — Recover complete drafts after Copilot tears down a model resource
 
 **Observed production failure.** A real stored-credential deep self-scan ran

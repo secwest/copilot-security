@@ -6,6 +6,51 @@ All notable scanner, application, benchmark, and operational changes are recorde
 
 ### Scanner effectiveness
 
+- Closed a measured Express transport-confidentiality false negative. The
+  unchanged scanner emitted no specialized row when a literal session route
+  placed an exact `jsonwebtoken.sign(...)` result in a credential-shaped
+  response cookie with `secure: false`; the topology-matched `secure: true`
+  control also remained unreported. The focused red baseline failed with zero
+  rows for the vulnerable fixture.
+- Added the bounded `node-express-sensitive-cookie-missing-secure` model with
+  CWE-614 and CWE-319 evidence. It shares the existing strict Express 4/5 and
+  jsonwebtoken 8/9 route, handler, response, dependency, sensitive-name, and
+  signed-value proofs, then evaluates Secure independently from HttpOnly.
+  Missing options, an absent `secure` property, and final literal
+  `secure: false` are reportable; literal `true` suppresses the candidate and
+  dynamic, computed, spread-bearing, non-object, or otherwise ambiguous
+  options fail closed.
+- Added browser-storage rejection controls from the current HTTP cookie model.
+  Secure omission on case-insensitive `__Host-` or `__Secure-` names,
+  `SameSite=None`, or `partitioned: true` is excluded because conforming
+  browsers reject the cookie rather than transmit it in cleartext. Exact
+  HttpOnly and Lax/Strict SameSite settings remain reviewer-visible controls
+  but do not suppress the separate transport defect.
+- Added pinned Express 5.2.1 and jsonwebtoken 9.0.3 cleartext/Secure fixtures,
+  offline in-memory serialization witnesses, a strict specialized manifest,
+  and the pair in the canonical repeated-run corpus. The witnesses start no
+  server or listener, send no request, and use no real token, credential, or
+  signing key.
+- The new and original Express cookie models plus the canonical benchmark lane
+  pass 32 tests with 2,985 assertions. Focused coverage includes omitted,
+  false, true, dynamic, spread, duplicate-final-value, HttpOnly-independent,
+  prefix-case, SameSite, Partitioned, witness, finding-quality, and reviewer
+  semantics. Adjacent framework and residual-risk lanes pass 86 tests with two
+  intentional platform skips and 1,149 assertions. TypeScript and generated
+  model checks pass.
+- The corrected complete Windows aggregate exercises 2,318 tests across 226
+  files in 955.79 seconds: 2,285 pass, 31 intentional platform or real-service
+  skips remain, and only the two established managed-filesystem boundaries are
+  denied. Both boundary files pass 48/48 with 244 assertions under native
+  Windows permissions. Formatting, generated models, TypeScript, the clean
+  production build, and the live production advisory audit are green.
+- Two independently built npm archives are byte-identical at 299 entries and
+  2,529,161 bytes with SHA-256
+  `84a2a57f84ad57101a8c4efcb2363b133043e4a32c3b7d82caf60ead3c4f1f26`.
+  Strict isolated installation validates 67 production packages, the public
+  import, executable CLI, and all 79 bundled plugin files. The canonical
+  benchmark now contains 212 exploit/control pairs, 424 cases, and 1,272
+  repeated scan positions.
 - Hardened post-draft Copilot recovery after a real self-scan produced all
   three complete artifacts and then received HTTP 400 `resource ... not
 found` during provider resource teardown. A narrow 400/404 requested-resource

@@ -709,6 +709,10 @@ describe("effectiveness benchmark", () => {
         "node-express-sensitive-cookie-readable",
         "node-express-sensitive-cookie-httponly",
       ],
+      [
+        "node-express-sensitive-cookie-cleartext",
+        "node-express-sensitive-cookie-secure",
+      ],
       ["node-fastify-open-redirect", "node-fastify-safe-local-redirect"],
       [
         "node-vue-router-client-request-forgery",

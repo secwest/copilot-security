@@ -10697,6 +10697,77 @@
         "node-express-sensitive-cookie-httponly/run-3/findings.json"
       ],
       "expected": []
+    },
+    {
+      "id": "node-express-sensitive-cookie-cleartext",
+      "description": "An Express session route places a signed authentication token in a session cookie with Secure explicitly disabled while retaining HttpOnly and SameSite.",
+      "fixture": "fixtures/node-express-sensitive-cookie-cleartext",
+      "findingsPaths": [
+        "node-express-sensitive-cookie-cleartext/run-1/findings.json",
+        "node-express-sensitive-cookie-cleartext/run-2/findings.json",
+        "node-express-sensitive-cookie-cleartext/run-3/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "node-express-sensitive-cookie-missing-secure",
+          "cwe": ["CWE-614", "CWE-319"],
+          "locations": [
+            {
+              "path": "src/server.js",
+              "startLine": 19,
+              "endLine": 19,
+              "lineTolerance": 1
+            }
+          ],
+          "acceptableSeverities": ["high", "medium", "low"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true,
+          "requiredValidationTextAnyOf": [
+            ["Express 5", "express@5.2.1", "Express application"],
+            ["POST /session", "/session route", "session route"],
+            ["jsonwebtoken", "jwt.sign", "signed authentication token"],
+            ["response.cookie", "session cookie", "authentication cookie"],
+            ["secure: false", "Secure disabled", "missing Secure"],
+            ["HTTP", "unencrypted transport", "cleartext transmission"],
+            ["HTTP reachable", "transport prerequisite", "deployment prerequisite"],
+            ["CWE-614", "CWE-319"]
+          ],
+          "requiredAttackPathTextAnyOf": [
+            ["HTTP reachability", "HTTP-reachable deployment", "unencrypted request"],
+            ["on-path observer", "network interception", "transport observer"],
+            ["Set-Cookie", "Secure attribute", "secure: false"],
+            ["session value", "signed authentication token", "session cookie"],
+            ["HttpOnly", "SameSite", "do not encrypt transport"],
+            ["in-memory", "no listener", "no network request"]
+          ],
+          "forbiddenText": [
+            "the witness started Express",
+            "the witness opened a listener",
+            "the witness sent a network request",
+            "the witness used a real token",
+            "proves interception occurred",
+            "proves the session was stolen",
+            "proves account takeover",
+            "proves the route is publicly reachable",
+            "every cookie is sensitive",
+            "HttpOnly encrypts the cookie",
+            "SameSite encrypts the cookie",
+            "HSTS always eliminates first-visit risk"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "node-express-sensitive-cookie-secure",
+      "description": "The topology-matched control sets Secure on the same signed session cookie, restricting browser transmission to HTTPS.",
+      "fixture": "fixtures/node-express-sensitive-cookie-secure",
+      "findingsPaths": [
+        "node-express-sensitive-cookie-secure/run-1/findings.json",
+        "node-express-sensitive-cookie-secure/run-2/findings.json",
+        "node-express-sensitive-cookie-secure/run-3/findings.json"
+      ],
+      "expected": []
     }
   ]
 }
