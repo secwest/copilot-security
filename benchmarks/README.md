@@ -1441,6 +1441,20 @@ value aliases, and rejection of wrong/default/namespace imports, reassignment,
 a ninth alias, fixed or unrelated fields, comments, and string-only
 pseudo-flows.
 
+`node-express-unverified-jwt-authorization-manifest.json` isolates an
+unverified JWT authorization boundary under perfect single-run gates. Its
+Express 5.2.1 positive extracts an Authorization Bearer token, calls official
+`jsonwebtoken` 9.0.3 `decode`, uses the decoded `role` claim as an admin gate,
+and returns protected response data. The topology-matched control replaces
+decode with signature verification pinned to a key, RS256, issuer, and
+audience before applying the same authorization decision. Both offline
+witnesses invoke the real library in memory without starting Express, opening
+a listener, sending a request, or using a real token, key, credential, or
+protected value. The specialized evaluator requires CWE-347/CWE-863, exact
+code evidence, validation of the trust boundary, a source-to-effect attack
+path, bounded impact language, and no control finding. The canonical manifest
+repeats the pair three times.
+
 ## Comparing scanner versions or implementations
 
 Run both scanners against exactly the same manifest, case selection, and

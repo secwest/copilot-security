@@ -10730,11 +10730,19 @@
             ["response.cookie", "session cookie", "authentication cookie"],
             ["secure: false", "Secure disabled", "missing Secure"],
             ["HTTP", "unencrypted transport", "cleartext transmission"],
-            ["HTTP reachable", "transport prerequisite", "deployment prerequisite"],
+            [
+              "HTTP reachable",
+              "transport prerequisite",
+              "deployment prerequisite"
+            ],
             ["CWE-614", "CWE-319"]
           ],
           "requiredAttackPathTextAnyOf": [
-            ["HTTP reachability", "HTTP-reachable deployment", "unencrypted request"],
+            [
+              "HTTP reachability",
+              "HTTP-reachable deployment",
+              "unencrypted request"
+            ],
             ["on-path observer", "network interception", "transport observer"],
             ["Set-Cookie", "Secure attribute", "secure: false"],
             ["session value", "signed authentication token", "session cookie"],
@@ -10802,7 +10810,11 @@
             ["credentials: true", "Access-Control-Allow-Credentials"],
             ["express-session 1.19.0", "express-session@1.19.0"],
             ["request.session.account", "session-derived account data"],
-            ["browser JavaScript", "cross-origin script", "response readability"],
+            [
+              "browser JavaScript",
+              "cross-origin script",
+              "response readability"
+            ],
             ["SameSite", "third-party cookie", "cookie policy"],
             ["CWE-942", "CWE-346", "CWE-639"]
           ],
@@ -10810,8 +10822,16 @@
             ["attacker-controlled origin", "attacker-selected Origin"],
             ["victim authenticated", "authenticated session"],
             ["credentialed request", "browser sends the session cookie"],
-            ["read the response", "response exposure", "browser response readability"],
-            ["CORS is not authentication", "not authorization", "does not block the request"],
+            [
+              "read the response",
+              "response exposure",
+              "browser response readability"
+            ],
+            [
+              "CORS is not authentication",
+              "not authorization",
+              "does not block the request"
+            ],
             ["in-memory", "no listener", "no network request"]
           ],
           "forbiddenText": [
@@ -10838,6 +10858,80 @@
         "node-express-credentialed-cors-allowlist/run-1/findings.json",
         "node-express-credentialed-cors-allowlist/run-2/findings.json",
         "node-express-credentialed-cors-allowlist/run-3/findings.json"
+      ],
+      "expected": []
+    },
+    {
+      "id": "node-express-unverified-jwt-authorization",
+      "description": "An Express admin route trusts an unverified decoded Bearer-token role claim.",
+      "fixture": "fixtures/node-express-unverified-jwt-authorization",
+      "findingsPaths": [
+        "node-express-unverified-jwt-authorization/run-1/findings.json",
+        "node-express-unverified-jwt-authorization/run-2/findings.json",
+        "node-express-unverified-jwt-authorization/run-3/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "node-express-unverified-jwt-authorization",
+          "cwe": ["CWE-347", "CWE-863"],
+          "locations": [
+            {
+              "path": "src/server.js",
+              "startLine": 12,
+              "endLine": 12,
+              "lineTolerance": 1
+            }
+          ],
+          "acceptableSeverities": ["high", "medium"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true,
+          "requiredValidationTextAnyOf": [
+            ["Express 5", "express@5.2.1", "Express application"],
+            ["GET /admin/status", "/admin/status route", "admin route"],
+            ["Authorization", "Bearer token", "request header"],
+            [
+              "jsonwebtoken 9.0.3",
+              "jsonwebtoken@9.0.3",
+              "official jsonwebtoken"
+            ],
+            ["jwt.decode", "decode without verification", "unverified claims"],
+            ["role", "authorization decision", "admin gate"],
+            ["protected response", "SYSTEM_STATUS_KEY", "accepted branch"],
+            ["signature", "algorithm", "issuer", "audience"],
+            ["CWE-347", "CWE-863", "authorization bypass"]
+          ],
+          "requiredAttackPathTextAnyOf": [
+            ["attacker-controlled Bearer token", "forged token"],
+            ["unsigned", "unverified", "signature is not verified"],
+            ["role claim", "admin claim"],
+            ["authorization decision", "admin gate"],
+            ["protected response", "system status key"],
+            ["inert", "no listener", "no network request"]
+          ],
+          "forbiddenText": [
+            "the witness started Express",
+            "the witness opened a listener",
+            "the witness sent a network request",
+            "the witness used a real token",
+            "the witness used a real key",
+            "proves public reachability",
+            "proves account takeover",
+            "proves host compromise",
+            "decode verifies the signature",
+            "base64 encoding provides integrity"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "node-express-verified-jwt-authorization",
+      "description": "The topology-matched control verifies signature, algorithm, issuer, and audience before authorization.",
+      "fixture": "fixtures/node-express-verified-jwt-authorization",
+      "findingsPaths": [
+        "node-express-verified-jwt-authorization/run-1/findings.json",
+        "node-express-verified-jwt-authorization/run-2/findings.json",
+        "node-express-verified-jwt-authorization/run-3/findings.json"
       ],
       "expected": []
     }

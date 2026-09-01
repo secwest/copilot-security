@@ -717,6 +717,10 @@ describe("effectiveness benchmark", () => {
         "node-express-credentialed-cors-reflection",
         "node-express-credentialed-cors-allowlist",
       ],
+      [
+        "node-express-unverified-jwt-authorization",
+        "node-express-verified-jwt-authorization",
+      ],
       ["node-fastify-open-redirect", "node-fastify-safe-local-redirect"],
       [
         "node-vue-router-client-request-forgery",

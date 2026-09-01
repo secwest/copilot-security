@@ -1,0 +1,9 @@
+{
+  "name": "node-express-unverified-jwt-authorization",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "express": "5.2.1",
+    "jsonwebtoken": "9.0.3"
+  }
+}

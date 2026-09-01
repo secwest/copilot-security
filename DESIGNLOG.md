@@ -2,6 +2,60 @@
 
 This log records consequential implementation decisions, their evidence, and the tradeoffs that future scanner work must preserve.
 
+## 2026-09-01 — Require an authorization effect before reporting unverified JWT decode
+
+**The measured gap is broader than the nearby maintained rule.** A pinned
+Express 5.2.1 route extracted a request Bearer token, passed it to official
+`jsonwebtoken` 9.0.3 `decode`, used the decoded `role` to admit an admin
+request, and returned a protected environment value. The unchanged scanner
+produced no specialized row; the source-matched `verify` control also remained
+silent. The official
+[`node-jsonwebtoken` documentation](https://github.com/auth0/node-jsonwebtoken/blob/master/README.md#jwtdecodetoken--options)
+states that `decode` does not verify signature validity and should not be used
+for untrusted messages. Its `verify` API validates the signature and can bind
+algorithm, audience, and issuer. CodeQL's high-precision
+[`js/jwt-missing-verification`](https://codeql.github.com/codeql-query-help/javascript/js-jwt-missing-verification/)
+currently detects the related but narrower falsy-key/`none` verification
+configuration. The new model measures the application authorization chain that
+was absent from both this scanner and that comparison rule.
+
+**Package presence and decode alone are insufficient.** Emit
+`node-express-unverified-jwt-authorization` only after proving exact production
+Express 4/5 and `jsonwebtoken` 8/9 runtime pins; official application or Router
+and decode bindings; a literal registered route; live request, response,
+handler, factory, route-method, and decode identities; an Authorization header
+flow with explicit Bearer extraction; a decoded authorization claim; a later
+claim-dependent decision; and a protected response after the gate. The source,
+decode, decision, effect, dependencies, and registration become structured
+propagators rather than prose guesses. CWE-347 captures missing message
+integrity and CWE-863 captures the resulting authorization failure.
+
+**Prefer bounded false negatives to speculative authorization findings.** Raw
+Authorization-header decode without proven Bearer extraction is not enough.
+Neither are expiry-only checks, unused decode results, reassigned claims,
+unregistered handlers, dynamic routes, local package lookalikes, unresolved or
+development-only versions, non-production paths, denial-only responses, or
+effects outside the handler. Multiline ternary extraction is supported only
+when an exact `startsWith("Bearer ")` guard is paired with the same symbol's
+immediate `slice(7)` or `substring(7)` continuation. Review must preserve the
+distinction between an inert unsigned-token witness and claims about deployed
+reachability, account takeover, host compromise, real credentials, or network
+activity.
+
+**Make the exploit and correction executable.** The vulnerable witness loads
+the real installed library and shows an in-memory unsigned token granting the
+admin decision through `decode`. The control calls real `verify` with a key
+and rejects that same token before authorization. Neither starts Express,
+opens a listener, accesses a network, nor uses real data. A strict one-run
+manifest requires validation, attack-path, code-evidence, severity, and exact
+semantic boundaries; the canonical manifest repeats both cases three times.
+Focused regression passes 12/12 tests and 58 assertions. Canonical, residual,
+framework, neighboring Express, and Copilot-port lanes pass 197 tests with two
+intentional skips; the sole managed ACL denial passes in the 42/42 native
+Windows rerun. The corpus grows to 214 pairs, 428 cases, and 1,284 repeated
+positions. Generated models and TypeScript remain clean, and the effectiveness
+goal remains active.
+
 ## 2026-09-01 — Authorize final evidence by immutable scope and await scanner shutdown
 
 **Findings came from the scanner, not an assumed threat.** A deep

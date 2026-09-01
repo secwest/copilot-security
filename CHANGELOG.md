@@ -6,6 +6,28 @@ All notable scanner, application, benchmark, and operational changes are recorde
 
 ### Scanner effectiveness
 
+- Closed a measured Express authorization false negative. Before the new model,
+  a production-shaped route that extracted a Bearer token, called official
+  `jsonwebtoken.decode`, trusted its `role` claim, and returned protected data
+  produced no specialized row; its signature-, algorithm-, issuer-, and
+  audience-verifying twin also remained silent.
+- Added `node-express-unverified-jwt-authorization` with CWE-347 and CWE-863
+  evidence. The deterministic model proves exact production Express 4/5 and
+  `jsonwebtoken` 8/9 dependencies, official bindings, a literal registered
+  route and live handler identities, Authorization-header provenance, explicit
+  Bearer extraction, unverified decode, a later decoded authorization-claim
+  decision, and a protected response. Rebindings, overwritten methods,
+  development-only packages, unresolved versions, test/example paths, raw
+  headers without Bearer extraction, non-authorization claims, and missing
+  protected effects fail closed.
+- Added pinned Express 5.2.1 and `jsonwebtoken` 9.0.3 vulnerable/control
+  fixtures, a strict specialized manifest, and real-library inert witnesses.
+  The focused lane passes 12/12 tests with 58 assertions. Canonical and
+  adjacent framework lanes pass 197 tests with two intentional platform skips
+  and only the established managed-sandbox ACL denial; its native Windows
+  rerun passes 42/42 with 205 assertions. Generated models and TypeScript are
+  clean. The canonical corpus now contains 214 exploit/control pairs, 428
+  cases, and 1,284 repeated scan positions.
 - Closed a measured Express credentialed-CORS false negative. A route that
   reflects an arbitrary request Origin, enables credentials, activates
   `express-session`, and returns session-derived data previously produced no

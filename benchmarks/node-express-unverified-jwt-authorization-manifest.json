@@ -1,0 +1,89 @@
+{
+  "schemaVersion": "1.0",
+  "thresholds": {
+    "minCompletionRate": 1,
+    "minPrecision": 1,
+    "minRecall": 1,
+    "minF1": 1,
+    "minCasePassRate": 1,
+    "minNegativeCasePassRate": 1,
+    "minStableDetectionRate": 1,
+    "minValidationRate": 1,
+    "minAttackPathRate": 1,
+    "minCodeEvidenceRate": 1,
+    "minSeverityAccuracy": 1,
+    "maxFalsePositivesPerRun": 0
+  },
+  "cases": [
+    {
+      "id": "node-express-unverified-jwt-authorization",
+      "description": "An Express admin route trusts an unverified decoded Bearer-token role claim.",
+      "fixture": "fixtures/node-express-unverified-jwt-authorization",
+      "findingsPaths": [
+        "node-express-unverified-jwt-authorization/run-1/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "node-express-unverified-jwt-authorization",
+          "cwe": ["CWE-347", "CWE-863"],
+          "locations": [
+            {
+              "path": "src/server.js",
+              "startLine": 12,
+              "endLine": 12,
+              "lineTolerance": 1
+            }
+          ],
+          "acceptableSeverities": ["high", "medium"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true,
+          "requiredValidationTextAnyOf": [
+            ["Express 5", "express@5.2.1", "Express application"],
+            ["GET /admin/status", "/admin/status route", "admin route"],
+            ["Authorization", "Bearer token", "request header"],
+            [
+              "jsonwebtoken 9.0.3",
+              "jsonwebtoken@9.0.3",
+              "official jsonwebtoken"
+            ],
+            ["jwt.decode", "decode without verification", "unverified claims"],
+            ["role", "authorization decision", "admin gate"],
+            ["protected response", "SYSTEM_STATUS_KEY", "accepted branch"],
+            ["signature", "algorithm", "issuer", "audience"],
+            ["CWE-347", "CWE-863", "authorization bypass"]
+          ],
+          "requiredAttackPathTextAnyOf": [
+            ["attacker-controlled Bearer token", "forged token"],
+            ["unsigned", "unverified", "signature is not verified"],
+            ["role claim", "admin claim"],
+            ["authorization decision", "admin gate"],
+            ["protected response", "system status key"],
+            ["inert", "no listener", "no network request"]
+          ],
+          "forbiddenText": [
+            "the witness started Express",
+            "the witness opened a listener",
+            "the witness sent a network request",
+            "the witness used a real token",
+            "the witness used a real key",
+            "proves public reachability",
+            "proves account takeover",
+            "proves host compromise",
+            "decode verifies the signature",
+            "base64 encoding provides integrity"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "node-express-verified-jwt-authorization",
+      "description": "The topology-matched control verifies signature, algorithm, issuer, and audience before authorization.",
+      "fixture": "fixtures/node-express-verified-jwt-authorization",
+      "findingsPaths": [
+        "node-express-verified-jwt-authorization/run-1/findings.json"
+      ],
+      "expected": []
+    }
+  ]
+}

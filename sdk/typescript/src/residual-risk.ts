@@ -4745,6 +4745,18 @@ const NODE_EXPRESS_CREDENTIALED_CORS_FIELD_EVIDENCE_REQUIREMENTS = [
   ["CWE-942", "CWE-346", "CWE-639"],
 ] as const;
 
+const NODE_EXPRESS_UNVERIFIED_JWT_FIELD_EVIDENCE_REQUIREMENTS = [
+  ["Express 4", "Express 5", "Express application", "Router"],
+  ["literal route", "registered handler", "admin route"],
+  ["Authorization", "Bearer token", "request header"],
+  ["jsonwebtoken 8", "jsonwebtoken 9", "official jsonwebtoken"],
+  ["jwt.decode", "decode without verification", "unverified claims"],
+  ["role", "permission", "scope", "authorization decision"],
+  ["protected response", "privileged data", "accepted branch"],
+  ["signature", "algorithm", "issuer", "audience"],
+  ["CWE-347", "CWE-863", "authorization bypass"],
+] as const;
+
 const NODE_FASTIFY_OPEN_REDIRECT_FIELD_EVIDENCE_REQUIREMENTS = [
   ["Fastify 5", "Fastify application", "route shorthand", "registered route"],
   [
@@ -4973,6 +4985,13 @@ const MODEL_SPECIFIC_FINDING_REQUIREMENTS: ReadonlyMap<
     {
       validation: NODE_EXPRESS_CREDENTIALED_CORS_FIELD_EVIDENCE_REQUIREMENTS,
       attackPath: NODE_EXPRESS_CREDENTIALED_CORS_FIELD_EVIDENCE_REQUIREMENTS,
+    },
+  ],
+  [
+    "node-express-unverified-jwt-authorization",
+    {
+      validation: NODE_EXPRESS_UNVERIFIED_JWT_FIELD_EVIDENCE_REQUIREMENTS,
+      attackPath: NODE_EXPRESS_UNVERIFIED_JWT_FIELD_EVIDENCE_REQUIREMENTS,
     },
   ],
   [
@@ -5352,6 +5371,7 @@ export async function buildResidualRiskInventory(
   records.push(...nodeExpressOpenRedirectRecords(sourceFiles));
   records.push(...nodeExpressSensitiveCookieRecords(sourceFiles));
   records.push(...nodeExpressCredentialedCorsRecords(sourceFiles));
+  records.push(...nodeExpressUnverifiedJwtAuthorizationRecords(sourceFiles));
   records.push(...nodeFastifyOpenRedirectRecords(sourceFiles));
   records.push(
     ...nodeFastifyAuthenticationMissingRateLimitRecords(sourceFiles),
@@ -25881,6 +25901,543 @@ function nodeExpressOpenRedirectRecords(
             });
             if (records.length >= MAX_FRAMEWORK_CROSS_FILE_RECORDS)
               return records;
+          }
+        }
+      }
+    }
+  }
+  return records;
+}
+
+interface NodeJsonWebTokenDecodeBinding {
+  dependency: NodeRuntimeDependency;
+  kind: "function" | "receiver";
+  line: number;
+  local: string;
+}
+
+interface NodeExpressAuthorizationHeaderSource {
+  line: number;
+  symbol: string;
+}
+
+function nodeExpressBearerTokenExtraction(
+  lines: readonly string[],
+  expression: string,
+  line: number,
+): boolean {
+  if (
+    /\bBearer\b/iu.test(expression) &&
+    /\.\s*(?:match|replace|slice|split|substring)\s*\(/u.test(expression)
+  ) {
+    return true;
+  }
+  const guarded =
+    /\b([A-Za-z_$][\w$]*)\s*\.\s*startsWith\s*\(\s*["'`]Bearer\s+["'`]\s*\)/u.exec(
+      expression,
+    )?.[1];
+  if (guarded === undefined) return false;
+  const continuation = javascriptCodeLinesWithoutComments(
+    lines.slice(line, Math.min(lines.length, line + 3)),
+  ).join("\n");
+  return new RegExp(
+    `\\?\\s*${escapeRegularExpression(guarded)}\\s*\\.\\s*(?:slice|substring)\\s*\\(\\s*7\\s*\\)`,
+    "u",
+  ).test(continuation);
+}
+
+function nodeJsonWebTokenDecodeBindings(
+  files: readonly SourceFileSnapshot[],
+  file: SourceFileSnapshot,
+): NodeJsonWebTokenDecodeBinding[] {
+  const dependency = nodeRuntimeDependency(files, file.path, "jsonwebtoken");
+  const major = Number(dependency?.version.split(".")[0]);
+  if (
+    dependency === undefined ||
+    !Number.isSafeInteger(major) ||
+    (major !== 8 && major !== 9)
+  ) {
+    return [];
+  }
+  const bindings: NodeJsonWebTokenDecodeBinding[] = [];
+  const add = (
+    kind: NodeJsonWebTokenDecodeBinding["kind"],
+    local: string | undefined,
+    line: number,
+  ): void => {
+    if (
+      local !== undefined &&
+      !bindings.some(
+        (candidate) =>
+          candidate.kind === kind &&
+          candidate.local === local &&
+          candidate.line === line,
+      )
+    ) {
+      bindings.push({ dependency, kind, local, line });
+    }
+  };
+  const codeLines = javascriptCodeLinesWithoutComments(file.lines);
+  for (let index = 0; index < codeLines.length; index += 1) {
+    const code = codeLines[index] ?? "";
+    const receiver =
+      /^\s*import\s+([A-Za-z_$][\w$]*)\s+from\s+["']jsonwebtoken["']/u.exec(
+        code,
+      )?.[1] ??
+      /^\s*import\s+\*\s+as\s+([A-Za-z_$][\w$]*)\s+from\s+["']jsonwebtoken["']/u.exec(
+        code,
+      )?.[1] ??
+      /^\s*import\s+([A-Za-z_$][\w$]*)\s*=\s*require\s*\(\s*["']jsonwebtoken["']\s*\)/u.exec(
+        code,
+      )?.[1] ??
+      /^\s*(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*require\s*\(\s*["']jsonwebtoken["']\s*\)\s*;?\s*$/u.exec(
+        code,
+      )?.[1];
+    add("receiver", receiver, index + 1);
+    const direct =
+      /^\s*(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*require\s*\(\s*["']jsonwebtoken["']\s*\)\s*\.\s*decode\s*;?\s*$/u.exec(
+        code,
+      )?.[1];
+    add("function", direct, index + 1);
+  }
+  for (const imported of importedJavascriptSymbols(file.lines)) {
+    if (
+      imported.moduleSpecifier === "jsonwebtoken" &&
+      imported.imported === "decode"
+    ) {
+      add("function", imported.local, imported.line);
+    }
+  }
+  return bindings;
+}
+
+function nodeExpressAuthorizationHeaderSource(
+  lines: readonly string[],
+  expression: string,
+  request: string,
+  line: number,
+  minimumLine: number,
+  depth = 0,
+  seen: ReadonlySet<string> = new Set(),
+  bearerExtraction = false,
+): NodeExpressAuthorizationHeaderSource | undefined {
+  const hasBearerExtraction =
+    bearerExtraction ||
+    nodeExpressBearerTokenExtraction(lines, expression, line);
+  const escapedRequest = escapeRegularExpression(request);
+  const direct = new RegExp(
+    `\\b${escapedRequest}\\s*(?:\\.\\s*(?:get|header)\\s*\\(\\s*["']authorization["']\\s*\\)|\\.\\s*headers\\s*(?:\\.\\s*authorization|\\[\\s*["']authorization["']\\s*\\]))`,
+    "iu",
+  ).exec(expression);
+  if (direct !== null) {
+    if (!hasBearerExtraction) return undefined;
+    return {
+      line:
+        line + (expression.slice(0, direct.index).match(/\n/gu)?.length ?? 0),
+      symbol: direct[0].replace(/\s+/gu, ""),
+    };
+  }
+  if (depth >= 4) return undefined;
+  for (const identifier of javascriptExpressionIdentifiers(expression)) {
+    if (
+      identifier === request ||
+      seen.has(identifier) ||
+      !/^[A-Za-z_$][\w$]*$/u.test(identifier)
+    ) {
+      continue;
+    }
+    const initializer = javascriptVariableInitializer(lines, identifier, line);
+    if (
+      initializer === undefined ||
+      initializer.line < minimumLine ||
+      initializer.line >= line ||
+      javascriptIdentifierReassignedBetween(
+        lines,
+        identifier,
+        initializer.line,
+        line,
+      )
+    ) {
+      continue;
+    }
+    const source = nodeExpressAuthorizationHeaderSource(
+      lines,
+      initializer.value,
+      request,
+      initializer.line,
+      minimumLine,
+      depth + 1,
+      new Set([...seen, identifier]),
+      hasBearerExtraction,
+    );
+    if (source !== undefined) return source;
+  }
+  return undefined;
+}
+
+function nodeExpressJwtAuthorizationDecisionLine(
+  lines: readonly string[],
+  claims: string,
+  afterLine: number,
+  endLine: number,
+): number | undefined {
+  const escapedClaims = escapeRegularExpression(claims);
+  const authorizationClaim = new RegExp(
+    `\\b${escapedClaims}\\s*(?:(?:\\?\\s*)?\\.\\s*(?:admin|isAdmin|role|roles|permission|permissions|scope|scopes|sub|subject|tenantId|userId|accountId)\\b|\\[\\s*["'](?:admin|isAdmin|role|roles|permission|permissions|scope|scopes|sub|subject|tenantId|userId|accountId)["']\\s*\\])`,
+    "u",
+  );
+  const first = Math.max(1, afterLine + 1);
+  for (let line = first; line <= endLine; line += 1) {
+    const window = javascriptStructuralLines(
+      lines.slice(line - 1, Math.min(endLine, line + 5)),
+    ).join("\n");
+    const ifExpression = /\bif\s*\(/gu;
+    for (const candidate of window.matchAll(ifExpression)) {
+      if (candidate.index === undefined) continue;
+      const open = window.indexOf("(", candidate.index);
+      const close = matchingCallParenthesis(window, open);
+      if (open < 0 || close < 0) continue;
+      const condition = window.slice(open + 1, close);
+      if (!authorizationClaim.test(condition)) continue;
+      return (
+        line + (window.slice(0, candidate.index).match(/\n/gu)?.length ?? 0)
+      );
+    }
+  }
+  return undefined;
+}
+
+function nodeExpressProtectedResponseLine(
+  lines: readonly string[],
+  response: string,
+  afterLine: number,
+  endLine: number,
+): number | undefined {
+  const expression = new RegExp(
+    `\\b${escapeRegularExpression(response)}\\s*\\.\\s*(?:download|json|render|send|sendFile)\\s*\\(`,
+    "u",
+  );
+  for (let line = afterLine + 1; line <= endLine; line += 1) {
+    if (expression.test(javascriptStructuralCode(lines[line - 1] ?? ""))) {
+      return line;
+    }
+  }
+  return undefined;
+}
+
+function nodeExpressUnverifiedJwtAuthorizationRecords(
+  files: readonly SourceFileSnapshot[],
+): ResidualRiskRecord[] {
+  const records: ResidualRiskRecord[] = [];
+  const emitted = new Set<string>();
+  for (const file of files) {
+    if (
+      !JAVASCRIPT_EXTENSIONS.has(file.extension) ||
+      javascriptTestOrExamplePath(file.path)
+    ) {
+      continue;
+    }
+    const expressDependency = nodeRuntimeDependency(
+      files,
+      file.path,
+      "express",
+    );
+    const expressMajor = Number(expressDependency?.version.split(".")[0]);
+    if (
+      expressDependency === undefined ||
+      !Number.isSafeInteger(expressMajor) ||
+      (expressMajor !== 4 && expressMajor !== 5)
+    ) {
+      continue;
+    }
+    const decodeBindings = nodeJsonWebTokenDecodeBindings(files, file);
+    if (decodeBindings.length === 0) continue;
+    const structural = javascriptStructuralLines(file.lines).join("\n");
+    for (const instance of nodeExpressInstanceBindings(file.lines)) {
+      const escapedInstance = escapeRegularExpression(instance.local);
+      const routeCallee = new RegExp(
+        `\\b${escapedInstance}\\s*\\.\\s*(?:all|delete|get|head|options|patch|post|put)\\s*\\(`,
+        "u",
+      );
+      for (const route of javascriptCallsInText(
+        file.text,
+        structural,
+        1,
+        routeCallee,
+      )) {
+        if (
+          route.line <= instance.line ||
+          nodeStaticString(route.arguments[0]) === undefined ||
+          javascriptIdentifierReassignedBetween(
+            file.lines,
+            instance.local,
+            instance.line,
+            route.line,
+          ) ||
+          file.lines
+            .slice(instance.line, route.line - 1)
+            .some((line) =>
+              new RegExp(
+                `\\b${escapedInstance}\\s*\\.\\s*(?:all|delete|get|head|options|patch|post|put)\\s*=`,
+                "u",
+              ).test(javascriptCodeBeforeComment(line)),
+            )
+        ) {
+          continue;
+        }
+        const routeEndLine =
+          1 + (structural.slice(0, route.close).match(/\n/gu)?.length ?? 0);
+        for (const handlerArgument of route.arguments.slice(1)) {
+          const inline = nodeExpressHandlerParameters(handlerArgument);
+          const named = /^[A-Za-z_$][\w$]*$/u.test(handlerArgument.trim())
+            ? nodeExpressNamedHandler(
+                file.lines,
+                handlerArgument.trim(),
+                route.line,
+              )
+            : undefined;
+          const handler: NodeExpressHandlerScope | undefined =
+            inline === undefined
+              ? named
+              : {
+                  ...inline,
+                  endLine: routeEndLine,
+                  startLine: route.line,
+                };
+          if (handler === undefined) continue;
+          if (
+            (handler.symbol !== undefined &&
+              javascriptIdentifierReassignedBetween(
+                file.lines,
+                handler.symbol,
+                handler.startLine,
+                route.line,
+              )) ||
+            javascriptIdentifierReassignedBetween(
+              file.lines,
+              handler.request,
+              handler.startLine,
+              handler.endLine + 1,
+            ) ||
+            javascriptIdentifierReassignedBetween(
+              file.lines,
+              handler.response,
+              handler.startLine,
+              handler.endLine + 1,
+            )
+          ) {
+            continue;
+          }
+          const handlerLines = file.lines.slice(
+            handler.startLine - 1,
+            handler.endLine,
+          );
+          const handlerText = handlerLines.join("\n");
+          const handlerStructural =
+            javascriptStructuralLines(handlerLines).join("\n");
+          for (const binding of decodeBindings) {
+            if (
+              binding.line >= handler.endLine ||
+              handler.request === binding.local ||
+              handler.response === binding.local ||
+              javascriptIdentifierReassignedBetween(
+                file.lines,
+                binding.local,
+                binding.line,
+                handler.endLine + 1,
+              )
+            ) {
+              continue;
+            }
+            const escapedBinding = escapeRegularExpression(binding.local);
+            const callee =
+              binding.kind === "receiver"
+                ? `${escapedBinding}\\s*\\.\\s*decode`
+                : escapedBinding;
+            if (
+              binding.kind === "receiver" &&
+              file.lines
+                .slice(binding.line, handler.endLine)
+                .some((line) =>
+                  new RegExp(
+                    `\\b${escapedBinding}\\s*\\.\\s*decode\\s*=`,
+                    "u",
+                  ).test(javascriptCodeBeforeComment(line)),
+                )
+            ) {
+              continue;
+            }
+            for (const decode of javascriptCallsInText(
+              handlerText,
+              handlerStructural,
+              handler.startLine,
+              new RegExp(`\\b${callee}\\s*\\(`, "u"),
+            )) {
+              const token = decode.arguments[0]?.trim();
+              if (token === undefined || token === "") continue;
+              const prefix = handlerStructural.slice(0, decode.start);
+              const declaration =
+                /(?:^|\n|[;{])\s*(?:const|let|var)\s+([A-Za-z_$][\w$]*)(?:\s*:[^=;\n]+)?\s*=\s*(?:await\s+)?$/u.exec(
+                  prefix,
+                );
+              const claims = declaration?.[1];
+              if (
+                claims === undefined ||
+                claims === handler.request ||
+                claims === handler.response ||
+                claims === binding.local
+              ) {
+                continue;
+              }
+              const source = nodeExpressAuthorizationHeaderSource(
+                file.lines,
+                token,
+                handler.request,
+                decode.line,
+                handler.startLine,
+              );
+              if (source === undefined) continue;
+              const decisionLine = nodeExpressJwtAuthorizationDecisionLine(
+                file.lines,
+                claims,
+                decode.line,
+                handler.endLine,
+              );
+              if (
+                decisionLine === undefined ||
+                javascriptIdentifierReassignedBetween(
+                  file.lines,
+                  claims,
+                  decode.line,
+                  decisionLine,
+                )
+              ) {
+                continue;
+              }
+              const responseLine = nodeExpressProtectedResponseLine(
+                file.lines,
+                handler.response,
+                decisionLine,
+                handler.endLine,
+              );
+              if (responseLine === undefined) continue;
+              const key = `${file.path}\0${source.line}\0${decode.line}\0${decisionLine}`;
+              if (emitted.has(key)) continue;
+              emitted.add(key);
+              const startLine = Math.max(
+                1,
+                decisionLine - CONTEXT_LINES_BEFORE,
+              );
+              const endLine = Math.min(
+                file.lines.length,
+                decisionLine + CONTEXT_LINES_AFTER,
+              );
+              records.push({
+                path: file.path,
+                line: decisionLine,
+                categories: [
+                  "framework-dataflow:node-express-unverified-jwt-authorization",
+                  "modeled-source:express-bearer-authorization-token",
+                  "modeled-sink:unverified-jwt-claim-authorization-decision",
+                ],
+                priority: 120,
+                startLine,
+                endLine,
+                excerpt: sourceExcerpt(file.lines, startLine, endLine),
+                sourceExcerpt: sourceExcerpt(
+                  file.lines,
+                  Math.max(1, source.line - 1),
+                  Math.min(file.lines.length, source.line + 1),
+                ),
+                frameworkModel: {
+                  schemaVersion: "1.2",
+                  id: "node-express-unverified-jwt-authorization",
+                  language: "javascript-typescript",
+                  scope: "same-file",
+                  source: {
+                    kind: "express-bearer-authorization-token",
+                    path: file.path,
+                    line: source.line,
+                  },
+                  sink: {
+                    kind: "unverified-jwt-claim-authorization-decision",
+                    path: file.path,
+                    line: decisionLine,
+                    cweIds: ["CWE-347", "CWE-863"],
+                  },
+                  propagators: [
+                    {
+                      kind: `express-${instance.kind}-factory-binding`,
+                      path: file.path,
+                      line: instance.factoryLine,
+                      symbol: instance.local,
+                    },
+                    {
+                      kind: "express-literal-authentication-route",
+                      path: file.path,
+                      line: route.line,
+                      symbol: nodeStaticString(route.arguments[0]),
+                    },
+                    {
+                      kind: "express-handler-request-response-binding",
+                      path: file.path,
+                      line: handler.startLine,
+                      symbol: `${handler.request},${handler.response}`,
+                    },
+                    {
+                      kind: "jsonwebtoken-decode-binding",
+                      path: file.path,
+                      line: binding.line,
+                      symbol: binding.local,
+                    },
+                    {
+                      kind: "jsonwebtoken-unverified-decode",
+                      path: file.path,
+                      line: decode.line,
+                      symbol: `${binding.local}.decode`,
+                    },
+                    {
+                      kind: "jsonwebtoken-runtime-dependency",
+                      path: binding.dependency.manifestPath,
+                      line: binding.dependency.line,
+                      symbol: `jsonwebtoken@${binding.dependency.version}:${binding.dependency.proof}`,
+                    },
+                    {
+                      kind: "express-protected-response-after-claim-gate",
+                      path: file.path,
+                      line: responseLine,
+                      symbol: handler.response,
+                    },
+                    {
+                      kind: "express-runtime-dependency",
+                      path: expressDependency.manifestPath,
+                      line: expressDependency.line,
+                      symbol: `express@${expressDependency.version}:${expressDependency.proof}`,
+                    },
+                  ],
+                  candidateControls: [
+                    {
+                      kind: "jwt-signature-verification-absent",
+                      path: file.path,
+                      line: decode.line,
+                    },
+                    {
+                      kind: "authorization-claim-gate",
+                      path: file.path,
+                      line: decisionLine,
+                    },
+                    {
+                      kind: "protected-response-after-claim-gate",
+                      path: file.path,
+                      line: responseLine,
+                    },
+                  ],
+                },
+              });
+              if (records.length >= MAX_FRAMEWORK_CROSS_FILE_RECORDS) {
+                return records;
+              }
+            }
           }
         }
       }
