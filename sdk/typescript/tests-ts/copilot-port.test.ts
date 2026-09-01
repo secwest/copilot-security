@@ -28,6 +28,7 @@ import {
   resolveCopilotCli,
   runWithFreshCopilotSessions,
   runScanQualityCorrection,
+  safetyClassifierFreshSessionRecoveryPrompt,
   safetyClassifierRetryPrompt,
   sendCopilotPromptWithSafetyRecovery,
   sendCopilotTurnWithDeadline,
@@ -41,6 +42,7 @@ import {
   CopilotSecurityError,
   ModelTransportInterruptedError,
   ModelTurnDeadlineExceededError,
+  SafetyClassifierRetriesExhaustedError,
   ScanClosureIncompleteError,
   scanAuthentication,
   type ScanAuthentication,
@@ -886,7 +888,7 @@ describe("Copilot port", () => {
     expect(attempts).toEqual([1, 2, 3, 4, 5]);
   });
 
-  test("never retries authentication, classifier, contract, or cancellation failures", async () => {
+  test("never retries authentication, raw classifier, contract, or cancellation failures", async () => {
     for (const terminal of [
       new Error("401 unauthorized token"),
       new Error("Safety classifier rejected the response"),
@@ -934,6 +936,9 @@ describe("Copilot port", () => {
     expect(freshSessionRetryReason(new ModelTransportInterruptedError())).toBe(
       "transport_interrupted",
     );
+    expect(
+      freshSessionRetryReason(new SafetyClassifierRetriesExhaustedError(6)),
+    ).toBe("safety_filter_refusal");
     for (const message of [
       "Responses stream ended without a completed response",
       "read ECONNRESET while waiting for model transport",
@@ -959,6 +964,52 @@ describe("Copilot port", () => {
       ),
     ).toBeNull();
     expect(() => freshSessionRecoveryPrompt("scan", 2, 3)).not.toThrow();
+  });
+
+  test("uses the fresh-session budget after bounded safety refusals", async () => {
+    const attempts: Array<{
+      attempt: number;
+      phase: string;
+      reason?: string;
+      prompt: string;
+    }> = [];
+    const retries: Array<[number, number, string, string]> = [];
+    const refusal = new SafetyClassifierRetriesExhaustedError(6);
+    const result = await runWithFreshCopilotSessions({
+      maxAttempts: 3,
+      prompt: "perform the complete defensive repository scan",
+      runAttempt: async (attempt, prompt, context) => {
+        attempts.push({ attempt, prompt, ...context });
+        if (attempt < 3) throw refusal;
+        return "completed";
+      },
+      onRetry: (attempt, maximum, reason, phase) => {
+        retries.push([attempt, maximum, reason, phase]);
+      },
+    });
+
+    expect(result).toBe("completed");
+    expect(attempts.map(({ attempt }) => attempt)).toEqual([1, 2, 3]);
+    expect(attempts[1]).toMatchObject({
+      phase: "scan",
+      reason: "safety_filter_refusal",
+    });
+    expect(attempts[1]?.prompt).toContain(
+      "Fresh-session safety-filter recovery 2/3",
+    );
+    expect(attempts[1]?.prompt).toContain(
+      "authorized defensive software-assurance scan",
+    );
+    expect(attempts[1]?.prompt).toContain(
+      "perform the complete defensive repository scan",
+    );
+    expect(retries).toEqual([
+      [2, 3, "safety_filter_refusal", "scan"],
+      [3, 3, "safety_filter_refusal", "scan"],
+    ]);
+    expect(safetyClassifierFreshSessionRecoveryPrompt("scan", 2, 3)).toContain(
+      "do not target external systems",
+    );
   });
 
   test("retries a sanitized model-transport interruption", async () => {
@@ -1136,9 +1187,7 @@ describe("Copilot port", () => {
         refusalAttempts += 1;
         throw new Error("Safety classifier refused the response.");
       }),
-    ).rejects.toThrow(
-      "safety filtering rejected the authorized defensive scan after 6 prompt attempts",
-    );
+    ).rejects.toBeInstanceOf(SafetyClassifierRetriesExhaustedError);
     expect(refusalAttempts).toBe(6);
 
     const terminal = new Error("network stopped");

@@ -41,6 +41,7 @@ export {
   OutputInsideProtectedRootError,
   PluginBootstrapError,
   PluginPythonUnavailableError,
+  SafetyClassifierRetriesExhaustedError,
   ScanClosureIncompleteError,
   ScanCostLimitExceededError,
   ScanInterruptedError,

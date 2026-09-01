@@ -2,6 +2,49 @@
 
 This log records consequential implementation decisions, their evidence, and the tradeoffs that future scanner work must preserve.
 
+## 2026-09-01 — Recover persistent classifier refusal across isolated sessions
+
+**The observed failure was neither quota nor authentication.** A deep scan of
+an immutable archive of exact checkpoint `e33df30` selected stored GitHub
+credentials, `gpt-5.6-sol`, high reasoning, deep mode, and no scanner AI-credit
+limit. Copilot accepted the session and the host completed discovery, but every
+one of the scanner's six bounded same-session prompt forms was refused. The
+retained partial output held only immutable host discovery inputs and no model
+draft. Treating this as a terminal account limit would discard a recoverable
+provider-classifier condition and contradict the observed authentication and
+configuration evidence.
+
+**Fresh-session eligibility requires a typed exhaustion proof.** Raise
+`SafetyClassifierRetriesExhaustedError` only after the explicit classifier
+recognizer sees six consecutive prompt-level refusals. Map that exact type to
+`safety_filter_refusal` before the generic scanner-error boundary. Ordinary
+strings containing refusal vocabulary remain terminal, as do authentication,
+authorization, contract, sandbox, cancellation, and cost failures. This keeps
+the retry mechanism from turning ambiguous errors into replay or weakening a
+provider decision.
+
+**Recovery changes isolation, not policy.** Spend only the already configured
+fresh-session allowance: three total sessions by default and never more than
+five. The replacement prompt identifies an authorized local defensive review,
+forbids external targeting, operational payloads, and sensitive-value output,
+replays the original scanner contract because conversational state is absent,
+and treats every existing artifact as an untrusted draft. The host still
+revalidates the immutable worklist, direct file views, target identity,
+findings, coverage closure, sandbox telemetry, and artifact hashes. Exhausting
+the final session remains an incomplete scan, never a clean result.
+
+**The boundary is regression-tested end to end.** The transport lane proves
+that two typed exhausted sessions can recover on a third while raw classifier
+text cannot replay, and that the six prompt attempts remain bounded. The API
+forwards only the sanitized reason and explicit phase; the CLI renders a fixed
+defensive-recovery message without provider text. The complete native suite
+passes 2,312 tests with 31 intentional skips, zero failures, and 17,908
+assertions across 2,343 tests and 228 files in 944.41 seconds. The
+two independent 299-entry, 2,582,270-byte release archives are identical at
+SHA-256 `06386eca06dc81618935be4663d701e5a9685a21e7ba5799cffd0d6916abd2ce`;
+strict isolated installation and the live production audit pass. The
+scanner-effectiveness goal remains active.
+
 ## 2026-09-01 — Require an authorization effect before reporting unverified JWT decode
 
 **The measured gap is broader than the nearby maintained rule.** A pinned

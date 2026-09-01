@@ -2729,11 +2729,13 @@ async function runScan(
                     ? `Model turn deadline reached; starting fresh session (${attempt}/${maxAttempts}).`
                     : details?.reason === "transport_interrupted"
                       ? `Model transport ended; starting fresh session (${attempt}/${maxAttempts}).`
-                      : details?.reason === "authentication"
-                        ? `Authentication interrupted; retrying (${attempt}/${maxAttempts}).`
-                        : details?.reason === "authorization"
-                          ? `Model access interrupted; retrying (${attempt}/${maxAttempts}).`
-                          : `Copilot connection interrupted; retrying (${attempt}/${maxAttempts})`;
+                      : details?.reason === "safety_filter_refusal"
+                        ? `Safety filtering persisted after bounded prompt retries; starting an isolated defensive recovery session (${attempt}/${maxAttempts}).`
+                        : details?.reason === "authentication"
+                          ? `Authentication interrupted; retrying (${attempt}/${maxAttempts}).`
+                          : details?.reason === "authorization"
+                            ? `Model access interrupted; retrying (${attempt}/${maxAttempts}).`
+                            : `Copilot connection interrupted; retrying (${attempt}/${maxAttempts})`;
         progress?.stage(message);
         progress?.startTimer(runningMessage());
       },

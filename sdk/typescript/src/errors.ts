@@ -43,6 +43,17 @@ export class ModelTransportInterruptedError extends IncompleteScanError {
     super("Copilot model transport ended before the scanner turn completed.");
   }
 }
+export class SafetyClassifierRetriesExhaustedError extends IncompleteScanError {
+  public constructor(
+    public readonly promptAttempts: number,
+    options?: ErrorOptions,
+  ) {
+    super(
+      `Copilot safety filtering rejected the authorized defensive scan after ${promptAttempts} prompt attempts.`,
+      options,
+    );
+  }
+}
 export class CompleteDraftArtifactsError extends IncompleteScanError {}
 export class ScanClosureIncompleteError extends IncompleteScanError {
   public constructor(

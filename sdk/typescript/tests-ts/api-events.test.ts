@@ -727,6 +727,14 @@ describe("one-shot scan events", () => {
       };
       yield {
         type: "copilot.fresh_session_retry",
+        attempt: 2,
+        max_attempts: 5,
+        reason: "safety_filter_refusal",
+        recovery_phase: "scan",
+        provider_error: "private classifier detail",
+      };
+      yield {
+        type: "copilot.fresh_session_retry",
         attempt: 999,
         max_attempts: 999,
         reason: "model_timeout",
@@ -770,8 +778,19 @@ describe("one-shot scan events", () => {
           phase: "coverage_closure",
         },
       },
+      {
+        attempt: 2,
+        maximum: 5,
+        details: {
+          reason: "safety_filter_refusal",
+          phase: "scan",
+        },
+      },
     ]);
     expect(JSON.stringify(reconnects)).not.toContain("private provider detail");
+    expect(JSON.stringify(reconnects)).not.toContain(
+      "private classifier detail",
+    );
     expect(JSON.stringify(reconnects)).not.toContain("474");
   });
 

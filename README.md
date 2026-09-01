@@ -545,17 +545,23 @@ Recoverable Copilot model-call failures are retried by the CLI inside the
 existing turn, with a fixed two-retry ceiling. Explicit safety-classifier,
 content-filter, Responsible AI, and policy-violation refusals receive a
 separate six-retry native budget even when the provider labels them terminal.
-If the provider still refuses, the host makes up to two additional prompt
-replays with progressively narrower authorized defensive framing. These
-replays preserve the original scan contract and existing correct drafts, use
+The host permits six total prompt attempts in that session: the original and
+five progressively narrower authorized-defensive continuations. These
+continuations preserve the scan contract and existing correct drafts, use
 idempotent writes, forbid external targeting and weaponization, and apply to
-the initial, quality-gate, and final repair turns.
+the initial, quality-gate, and final repair turns. If all six are explicitly
+refused, a typed exhaustion signal may consume the existing bounded
+fresh-session budget. The isolated replacement receives the original contract
+under an explicit local-only defensive preamble and treats existing artifacts
+as untrusted drafts.
 
 The retry classifier is deliberately narrow: ordinary uses of words such as
 `policy`, `blocked`, `unsafe`, authentication errors, tool failures, transport
 failures, and scanner safety-limit diagnostics do not trigger prompt replay.
-Persistent safety refusal fails with a fixed diagnostic after three total
-prompt attempts rather than being reported as a successful or clean scan.
+Raw classifier-looking error text cannot open a fresh session: only the typed
+result of exhausting all six same-session attempts is eligible. A refusal that
+persists through the configured isolated-session budget fails with a fixed
+diagnostic rather than being reported as a successful or clean scan.
 Startup and session creation are cancellation-aware, and a partially started
 CLI runtime is gracefully stopped or force-stopped before the original error
 is returned. Each model turn has an independent host-enforced one-hour
@@ -587,17 +593,18 @@ strict JSON is not rewritten. A normalized draft still has to pass the same
 canonical schemas, repository evidence grounding, coverage reconciliation, and
 seal checks; normalization cannot make an invalid security result acceptable.
 
-A hard model-turn deadline, recognized transport interruption, or persistent
-host-proven closure gap starts a new, isolated Copilot CLI session over the
-same disposable analysis snapshot and immutable host worklist. Direct scans
-allow three total sessions by default. Set
+A hard model-turn deadline, recognized transport interruption, typed
+same-session safety-refusal exhaustion, or persistent host-proven closure gap
+starts a new, isolated Copilot CLI session over the same disposable analysis
+snapshot and immutable host worklist. Direct scans allow three total sessions
+by default. Set
 `--max-session-attempts N`, or SDK `maxSessionAttempts`, from `1` through `5`;
 `1` disables fresh-session recovery. Authentication, authorization, scanner
-contract, sandbox, cancellation, cost-limit, and exhausted safety-classifier
-failures remain terminal. Recovery never trusts conversational state or a
-prior session's artifact claims: an ordinary replacement must re-consume the
-inventory, while draft-quality recovery treats existing artifacts as untrusted
-drafts and consumes freshly computed host gap inventories. A closure replacement
+contract, sandbox, cancellation, cost-limit, and untyped classifier failures
+remain terminal. Recovery never trusts conversational state or a prior
+session's artifact claims: an ordinary or safety replacement must re-consume
+the inventory, while draft-quality recovery treats existing artifacts as
+untrusted drafts and consumes freshly computed host gap inventories. A closure replacement
 skips the broad discovery replay, preserves only host-observed successful file
 views, and directly works the remaining coverage and finding-quality gaps.
 Successful built-in file views remain valid host telemetry across sessions over

@@ -28,6 +28,31 @@ All notable scanner, application, benchmark, and operational changes are recorde
   rerun passes 42/42 with 205 assertions. Generated models and TypeScript are
   clean. The canonical corpus now contains 214 exploit/control pairs, 428
   cases, and 1,284 repeated scan positions.
+- Post-JWT acceptance passes 2,312 tests with 31 intentional platform or
+  real-service skips, zero failures, and 17,908 assertions across 2,343 tests
+  and 228 files in 944.41 seconds under native Windows permissions. Formatting,
+  generated models, TypeScript, and the production build are clean.
+- A stored-credential `gpt-5.6-sol` high-reasoning deep self-scan of exact
+  checkpoint `e33df30` proved the account had authenticated model access and no
+  configured AI-credit ceiling, but the initial session was refused after all
+  six bounded prompt attempts. The retained partial directory contained only
+  host discovery inputs and no model-authored drafts, distinguishing classifier
+  behavior from quota, billing, authentication, or scan completion.
+- Persistent explicit classifier refusal now raises a dedicated typed
+  incomplete-scan error only after all same-session defensive continuations are
+  exhausted. That type alone can consume the existing one-to-five isolated
+  session budget. Each replacement uses a local-only defensive preamble,
+  re-consumes the immutable worklist, distrusts prior artifacts, remains subject
+  to host closure and sandbox checks, and emits a sanitized
+  `safety_filter_refusal` progress reason. Raw refusal-looking strings,
+  authentication, authorization, contract, cancellation, and other terminal
+  errors cannot trigger this recovery.
+- Two independent recovery-checkpoint npm archives are byte-identical at 299
+  entries and 2,582,270 bytes with SHA-256
+  `06386eca06dc81618935be4663d701e5a9685a21e7ba5799cffd0d6916abd2ce`.
+  Strict isolated installation validates 67 production packages, the public
+  import, executable CLI, and all 79 bundled plugin files. The live production
+  advisory audit reports no known vulnerabilities.
 - Closed a measured Express credentialed-CORS false negative. A route that
   reflects an arbitrary request Origin, enables credentials, activates
   `express-session`, and returns session-derived data previously produced no

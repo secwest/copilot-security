@@ -210,6 +210,7 @@ export interface ScanReconnectDetails {
     | "authorization"
     | "model_timeout"
     | "transport_interrupted"
+    | "safety_filter_refusal"
     | "closure_incomplete";
   retryAfterSeconds?: number;
   phase?: "scan" | "draft_quality_correction" | "coverage_closure";
@@ -1725,6 +1726,7 @@ export async function runScanEvents(
           [
             "model_timeout",
             "transport_interrupted",
+            "safety_filter_refusal",
             "closure_incomplete",
           ].includes(event["reason"])
         ) {
@@ -1738,6 +1740,7 @@ export async function runScanEvents(
               reason: event["reason"] as
                 | "model_timeout"
                 | "transport_interrupted"
+                | "safety_filter_refusal"
                 | "closure_incomplete",
               ...([
                 "scan",

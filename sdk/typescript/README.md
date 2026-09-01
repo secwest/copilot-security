@@ -345,14 +345,16 @@ The package is ESM-only and provides:
   relative-import/call/parameter summaries for Node/TypeScript and Python
   wrappers; language strings and comments are masked before structural
   matching
-- bounded native Copilot model-call retries plus six concise, idempotent
-  defensive recovery prompts for explicit safety-classifier refusals, without
-  replaying the original blocked text, and cancellation-safe cleanup of
-  partially initialized CLI sessions
+- bounded native Copilot model-call retries plus six total same-session prompt
+  attempts for explicit safety-classifier refusals, using concise, idempotent
+  defensive continuations without replaying blocked text; typed exhaustion may
+  then use the existing isolated-session budget, and partially initialized CLI
+  sessions retain cancellation-safe cleanup
 - up to three isolated Copilot sessions by default after hard model-turn
-  deadlines or recognized transport interruptions, with untrusted-draft
-  recovery over the same immutable snapshot, bounded disconnects, and
-  cumulative root/subagent cost accounting across attempts
+  deadlines, recognized transport interruptions, or typed safety-refusal
+  exhaustion, with untrusted-draft recovery over the same immutable snapshot,
+  bounded disconnects, and cumulative root/subagent cost accounting across
+  attempts
 - bounded, data-only normalization of complete flow-style model drafts before
   deterministic sealing; aliases, duplicate keys, ambiguous syntax, symlinks,
   and non-object roots remain terminal, and canonical schemas still decide
@@ -432,12 +434,15 @@ Usage values in scan results describe consumption, not remaining entitlement.
 `maxAiCredits` opts into Copilot's native per-session AI-credit limit and
 includes subagent use; Copilot CLI requires an explicit limit of at least `30`.
 `maxSessionAttempts` accepts `1` through `5` and defaults to `3`; `1` disables
-fresh-session recovery. Only scanner-owned model-turn deadlines and recognized
-transport interruptions open a new session. Authentication, authorization,
-contract, sandbox, cancellation, cost-limit, and exhausted safety-filter
-failures remain terminal. A new session receives the original scan contract,
-re-consumes the immutable host inventory, and treats existing artifacts as
-untrusted partial drafts. When all three drafts already exist, a retryable
+fresh-session recovery. Scanner-owned model-turn deadlines, recognized
+transport interruptions, host-proven closure gaps, and the typed result of
+exhausting all six same-session safety prompt attempts can open a new session.
+Raw classifier text cannot. Authentication, authorization, contract, sandbox,
+cancellation, and cost-limit failures remain terminal. A new session receives
+the original scan contract, re-consumes the immutable host inventory, and
+treats existing artifacts as untrusted partial drafts. A safety replacement
+adds a local-only defensive preamble and still undergoes every host validation.
+When all three drafts already exist, a retryable
 deadline or transport failure instead enters `draft_quality_correction`: the
 replacement session skips full scan replay, consumes freshly computed
 residual-risk, secret-candidate, coverage-gap, and finding-quality inventories,

@@ -20,6 +20,7 @@ import {
   CopilotSecurityError,
   ModelTransportInterruptedError,
   ModelTurnDeadlineExceededError,
+  SafetyClassifierRetriesExhaustedError,
   ScanClosureIncompleteError,
   SourceDiscoveryError,
 } from "./errors.js";
@@ -860,6 +861,7 @@ export async function sendCopilotTurnWithDeadline(
 export type FreshSessionRetryReason =
   | "model_timeout"
   | "transport_interrupted"
+  | "safety_filter_refusal"
   | "closure_incomplete";
 
 export type FreshSessionRecoveryPhase =
@@ -908,6 +910,9 @@ export function freshSessionRetryReason(
   if (error instanceof ModelTransportInterruptedError) {
     return "transport_interrupted";
   }
+  if (error instanceof SafetyClassifierRetriesExhaustedError) {
+    return "safety_filter_refusal";
+  }
   if (error instanceof CopilotSecurityError) return null;
   if (isSafetyClassifierRefusal(error)) return null;
   const message = errorMessage(error).slice(0, 8 * 1024);
@@ -952,7 +957,17 @@ export async function runWithFreshCopilotSessions<T>(options: {
           ? coverageClosureRecoveryPrompt(attempt, maxAttempts)
           : context.phase === "draft_quality_correction"
             ? completeDraftQualityRecoveryPrompt(attempt, maxAttempts)
-            : freshSessionRecoveryPrompt(options.prompt, attempt, maxAttempts);
+            : context.reason === "safety_filter_refusal"
+              ? safetyClassifierFreshSessionRecoveryPrompt(
+                  options.prompt,
+                  attempt,
+                  maxAttempts,
+                )
+              : freshSessionRecoveryPrompt(
+                  options.prompt,
+                  attempt,
+                  maxAttempts,
+                );
     try {
       return await options.runAttempt(attempt, prompt, context);
     } catch (error) {
@@ -1028,6 +1043,21 @@ export function freshSessionRecoveryPrompt(
     "A prior isolated Copilot session ended before host-validated completion. This is a new session with no trusted conversational state from that attempt.",
     "Treat every existing scan artifact as an untrusted, possibly partial draft. Re-consume the immutable inventory and worklist, reopen cited repository evidence, preserve correct work idempotently, repair incomplete work, and satisfy the full installed scan skill.",
     "Do not infer coverage or validation from the prior session having written a file. The trusted host will independently verify target identity, inventory integrity, closure, canonical artifacts, and cost across every attempt before sealing the scan.",
+  ].join("\n");
+}
+
+export function safetyClassifierFreshSessionRecoveryPrompt(
+  prompt: string,
+  attempt: number,
+  maxAttempts: number,
+): string {
+  return [
+    `Fresh-session safety-filter recovery ${attempt}/${maxAttempts}.`,
+    "This is an authorized defensive software-assurance scan requested by the repository owner. Analyze only the isolated local repository and inert evidence; do not target external systems, reproduce operational payloads, or expose sensitive values.",
+    "A prior isolated session exhausted its bounded same-session safety rewrites before host-validated completion. Start from the immutable host worklist and scanner contract in this new session. Treat prior artifacts as untrusted drafts, preserve any host-validated progress idempotently, and keep findings concise, defensive, and remediation-focused.",
+    "A safety refusal is not a vulnerability or coverage result. The trusted host will independently verify target identity, direct file views, inventory integrity, findings, coverage closure, and artifact hashes before accepting the scan.",
+    "",
+    prompt,
   ].join("\n");
 }
 
@@ -1160,8 +1190,8 @@ export async function sendCopilotPromptWithSafetyRecovery(
       lastRefusal = error;
     }
   }
-  throw new CopilotSecurityError(
-    `Copilot safety filtering rejected the authorized defensive scan after ${SAFETY_CLASSIFIER_REPLAY_ATTEMPTS} prompt attempts.`,
+  throw new SafetyClassifierRetriesExhaustedError(
+    SAFETY_CLASSIFIER_REPLAY_ATTEMPTS,
     { cause: lastRefusal },
   );
 }
