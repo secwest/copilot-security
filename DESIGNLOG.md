@@ -91,6 +91,45 @@ import, executable CLI, and all 79 bundled plugin files. The canonical corpus
 now contains 212 exploit/control pairs, 424 cases, and 1,272 repeated scan
 positions.
 
+**Exact-checkpoint and desktop acceptance.** Two independently compiled
+inventories of tracked-only checkpoint
+`42edfdc9a000e97ffd0666a8136246cece0bba98` are byte-identical at 256 rows and
+644,286 bytes with SHA-256
+`87cc862e661f928747a8be75c5641f1da63bf8326c988670c705e4e30027ee96`.
+Exactly one newly selected row identifies the intentional vulnerable fixture:
+jsonwebtoken signing line 14 reaches Express cookie line 19 with CWE-614 and
+CWE-319, `secure: false`, and adjacent HttpOnly and SameSite evidence. The
+source-matched `secure: true` control is absent. On Windows, the GUI builds
+with zero warnings or errors, passes 7/7 execution-core and 3/3 shared tests,
+and publishes a 346,796-byte executable with SHA-256
+`5f3854c5a8c4a774b01ed05d376b1358a4a497f58d0c8a04a4e1982f16cf1e55`.
+A hidden native process remains alive for the observation interval and then
+stops under control. On Ubuntu/WSL, locked restores, a zero-warning build, the
+same core and shared suites, and 2/2 headless tests pass. The 72,568-byte Linux
+executable has SHA-256
+`7e29d642169a6c218c249216c6c10648307aea88faf636b69ac25741104b4adf`;
+both its non-graphical smoke path and an actual Avalonia window under X11/Xvfb
+pass within their bounds. The Linux settings path remains isolated under
+`~/.config/secwest/copilot-security`, preserving side-by-side operation.
+
+**Hosted closure.** Every workflow family passes on that exact implementation
+checkpoint. Node run
+[`33492991932`](https://github.com/secwest/copilot-security/actions/runs/33492991932)
+passes 92/92 jobs; [container `33492991931`](https://github.com/secwest/copilot-security/actions/runs/33492991931),
+[Windows GUI `33492991836`](https://github.com/secwest/copilot-security/actions/runs/33492991836),
+[Linux GUI `33492991811`](https://github.com/secwest/copilot-security/actions/runs/33492991811),
+[.NET `33492991901`](https://github.com/secwest/copilot-security/actions/runs/33492991901),
+[Go `33492991809`](https://github.com/secwest/copilot-security/actions/runs/33492991809),
+[Java `33492991896`](https://github.com/secwest/copilot-security/actions/runs/33492991896),
+[Kotlin `33492991854`](https://github.com/secwest/copilot-security/actions/runs/33492991854),
+[PHP `33492991851`](https://github.com/secwest/copilot-security/actions/runs/33492991851),
+[Ruby `33492991902`](https://github.com/secwest/copilot-security/actions/runs/33492991902),
+and [Rust `33492991962`](https://github.com/secwest/copilot-security/actions/runs/33492991962)
+pass. GitHub reports the repository public on default branch `main`.
+Disposable tracked-checkpoint, package, and GUI publication trees are removed
+after verification; scanner-owned persistent state remains exclusively under
+`copilot-security-home`. The scanner-effectiveness goal remains active.
+
 ## 2026-08-31 — Recover complete drafts after Copilot tears down a model resource
 
 **Observed production failure.** A real stored-credential deep self-scan ran

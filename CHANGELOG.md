@@ -51,6 +51,29 @@ All notable scanner, application, benchmark, and operational changes are recorde
   import, executable CLI, and all 79 bundled plugin files. The canonical
   benchmark now contains 212 exploit/control pairs, 424 cases, and 1,272
   repeated scan positions.
+- Two independently compiled inventories of exact tracked checkpoint
+  `42edfdc9a000e97ffd0666a8136246cece0bba98` are byte-identical at 256 rows
+  and 644,286 bytes with SHA-256
+  `87cc862e661f928747a8be75c5641f1da63bf8326c988670c705e4e30027ee96`.
+  Exactly one new row selects the intentional cleartext-cookie fixture at
+  jsonwebtoken signing line 14 and Express cookie line 19 with CWE-614 and
+  CWE-319; the topology-matched `secure: true` control is absent.
+- Windows builds with zero warnings or errors, passes 7/7 execution-core and
+  3/3 shared tests, and publishes a 346,796-byte executable with SHA-256
+  `5f3854c5a8c4a774b01ed05d376b1358a4a497f58d0c8a04a4e1982f16cf1e55`.
+  A hidden native startup remains alive through the observation interval and
+  then stops under control. Ubuntu/WSL restores the locked graph, builds with
+  zero warnings or errors, passes the same suites plus 2/2 headless tests,
+  and passes both non-graphical smoke startup and a real Avalonia window under
+  X11/Xvfb. Its 72,568-byte executable has SHA-256
+  `7e29d642169a6c218c249216c6c10648307aea88faf636b69ac25741104b4adf`.
+- Exact implementation checkpoint `42edfdc9a000e97ffd0666a8136246cece0bba98`
+  passes every hosted workflow family. Node run `33492991932` passes 92/92
+  jobs; container `33492991931`, Windows GUI `33492991836`, Linux GUI
+  `33492991811`, .NET `33492991901`, Go `33492991809`, Java `33492991896`,
+  Kotlin `33492991854`, PHP `33492991851`, Ruby `33492991902`, and Rust
+  `33492991962` pass. GitHub reports the repository public on default branch
+  `main`.
 - Hardened post-draft Copilot recovery after a real self-scan produced all
   three complete artifacts and then received HTTP 400 `resource ... not
 found` during provider resource teardown. A narrow 400/404 requested-resource
