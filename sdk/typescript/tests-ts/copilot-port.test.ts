@@ -712,6 +712,47 @@ describe("Copilot port", () => {
     );
   });
 
+  test("recovers a missing provider resource only after complete drafts", async () => {
+    const attempts: Array<{ attempt: number; phase: string; reason?: string }> =
+      [];
+    const retries: Array<[string, string]> = [];
+    const missingResource = new Error(
+      "400 The resource you requested was not found. (Request ID: private)",
+    );
+    const result = await runWithFreshCopilotSessions({
+      maxAttempts: 3,
+      prompt: "initial scan",
+      runAttempt: async (attempt, _prompt, context) => {
+        attempts.push({ attempt, ...context });
+        if (attempt === 1) {
+          throw new CompleteDraftArtifactsError(
+            "complete draft resource loss",
+            {
+              cause: missingResource,
+            },
+          );
+        }
+        return "corrected";
+      },
+      onRetry: (_attempt, _maximum, reason, phase) => {
+        retries.push([reason, phase]);
+      },
+    });
+
+    expect(result).toBe("corrected");
+    expect(attempts).toEqual([
+      { attempt: 1, phase: "scan" },
+      {
+        attempt: 2,
+        phase: "draft_quality_correction",
+        reason: "model_resource_not_found",
+      },
+    ]);
+    expect(retries).toEqual([
+      ["model_resource_not_found", "draft_quality_correction"],
+    ]);
+  });
+
   test("keeps repeated draft correction transport failures inside the session budget", async () => {
     const phases: string[] = [];
     const prompts: string[] = [];
@@ -892,6 +933,7 @@ describe("Copilot port", () => {
     for (const terminal of [
       new Error("401 unauthorized token"),
       new Error("Safety classifier rejected the response"),
+      new Error("400 The resource you requested was not found"),
       new Error("coverage contract validation failed"),
       new CompleteDraftArtifactsError("unretryable complete drafts", {
         cause: new CopilotSecurityError("401 authentication failed"),

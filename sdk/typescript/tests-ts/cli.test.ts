@@ -2055,6 +2055,10 @@ describe("CLI", () => {
           reason: "transport_interrupted",
           phase: "draft_quality_correction",
         });
+        options?.onReconnect?.(3, 5, {
+          reason: "model_resource_not_found",
+          phase: "draft_quality_correction",
+        });
         options?.onReconnect?.(2, 5, { reason: "authentication" });
         options?.onReconnect?.(3, 5, { reason: "authorization" });
         return fakeResult();
@@ -2080,7 +2084,10 @@ describe("CLI", () => {
       "Coverage gaps remain; continuing host-audited closure in a fresh session (2/5).",
     );
     expect(stderr.text()).toContain(
-      "Draft transport ended; continuing host-audited quality correction in a fresh session (2/3).",
+      "Draft-producing model turn ended; continuing host-audited quality correction in a fresh session (2/3).",
+    );
+    expect(stderr.text()).toContain(
+      "Copilot model resource disappeared after complete drafts; continuing host-audited quality correction in a fresh session (3/5).",
     );
     expect(stderr.text()).toContain("Authentication interrupted; retrying");
     expect(stderr.text()).toContain("Model access interrupted; retrying");

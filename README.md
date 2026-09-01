@@ -594,10 +594,11 @@ canonical schemas, repository evidence grounding, coverage reconciliation, and
 seal checks; normalization cannot make an invalid security result acceptable.
 
 A hard model-turn deadline, recognized transport interruption, typed
-same-session safety-refusal exhaustion, or persistent host-proven closure gap
-starts a new, isolated Copilot CLI session over the same disposable analysis
-snapshot and immutable host worklist. Direct scans allow three total sessions
-by default. Set
+same-session safety-refusal exhaustion, an exact provider resource-loss error
+after all three drafts exist, or persistent host-proven closure gap starts a
+new, isolated Copilot CLI session over the same disposable analysis snapshot
+and immutable host worklist. The same provider error before complete drafts is
+terminal. Direct scans allow three total sessions by default. Set
 `--max-session-attempts N`, or SDK `maxSessionAttempts`, from `1` through `5`;
 `1` disables fresh-session recovery. Authentication, authorization, scanner
 contract, sandbox, cancellation, cost-limit, and untyped classifier failures

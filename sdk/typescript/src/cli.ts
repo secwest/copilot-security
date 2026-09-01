@@ -2716,7 +2716,9 @@ async function runScan(
           details?.reason === "closure_incomplete"
             ? `Coverage gaps remain; continuing host-audited closure in a fresh session (${attempt}/${maxAttempts}).`
             : details?.phase === "draft_quality_correction"
-              ? `Draft transport ended; continuing host-audited quality correction in a fresh session (${attempt}/${maxAttempts}).`
+              ? details.reason === "model_resource_not_found"
+                ? `Copilot model resource disappeared after complete drafts; continuing host-audited quality correction in a fresh session (${attempt}/${maxAttempts}).`
+                : `Draft-producing model turn ended; continuing host-audited quality correction in a fresh session (${attempt}/${maxAttempts}).`
               : details?.reason === "rate_limit"
                 ? `Rate limit reached; retrying${
                     details.retryAfterSeconds === undefined

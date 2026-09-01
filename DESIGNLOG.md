@@ -2,6 +2,40 @@
 
 This log records consequential implementation decisions, their evidence, and the tradeoffs that future scanner work must preserve.
 
+## 2026-09-01 — Retry provider resource loss only after complete drafts
+
+**The self-scan exercised two independent failure layers.** The immutable
+29-file scan of exact classifier-recovery checkpoint `20f3017` produced its
+threat model, six deep-pass receipts, centralized discovery and validation
+ledgers, and all three canonical drafts. After its six same-session safety
+forms were refused, the new typed path correctly opened isolated session 2/5.
+That replacement then received the provider's exact `400 The resource you
+requested was not found` response. The scanner retained the drafts but exited
+with three sessions unused. Authentication, credit allowance, and the safety
+recovery branch had all already succeeded; this was a separate post-draft
+provider resource-lifecycle failure.
+
+**Complete drafts are the authority boundary.** The existing
+`modelFailureAfterCompleteDraftArtifacts` helper deliberately recognizes the
+bounded provider 400/404 wording only after verifying that manifest, findings,
+and coverage drafts all exist. Preserve that narrow gate. When—and only when—
+the exact cause is nested inside typed `CompleteDraftArtifactsError`, classify
+it as `model_resource_not_found` and enter `draft_quality_correction`. Do not
+add the raw HTTP wording to the generic fresh-session classifier: before all
+drafts exist, or outside the typed wrapper, it remains terminal.
+
+**Recovery still proves rather than trusts.** The next session receives the
+same correction prompt as timeout and transport recovery, consumes freshly
+computed host gap inventories, treats existing drafts as untrusted, and must
+pass deterministic evidence, scope, coverage, and sealing checks. API observers
+receive only the fixed reason and phase; provider request identifiers stay
+private. Focused transport, API, and CLI regressions pass 148 tests with one
+intentional platform skip, zero failures, and 1,429 assertions. Two independent
+299-entry, 2,582,905-byte release archives are identical at SHA-256
+`5a4e5f236d12019c79d9f2b4fb1eb6bb3656e04801f4481767ee27710af90034`,
+and strict isolated installation validates the public package. The
+scanner-effectiveness goal remains active.
+
 ## 2026-09-01 — Recover persistent classifier refusal across isolated sessions
 
 **The observed failure was neither quota nor authentication.** A deep scan of

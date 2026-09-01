@@ -53,6 +53,25 @@ All notable scanner, application, benchmark, and operational changes are recorde
   Strict isolated installation validates 67 production packages, the public
   import, executable CLI, and all 79 bundled plugin files. The live production
   advisory audit reports no known vulnerabilities.
+- The immutable 29-file self-scan of classifier-recovery checkpoint `20f3017`
+  exercised the new branch in production: session 1 exhausted its safety
+  rewrites after producing complete drafts, emitted only the sanitized recovery
+  event, and opened session 2/5. The replacement then received an exact provider
+  `400 resource not found` response. Although the scanner had already wrapped
+  that condition as a complete-draft failure, the fresh-session classifier did
+  not map its cause and terminated with three sessions unused.
+- Exact provider resource loss now consumes a fresh session only when nested
+  inside `CompleteDraftArtifactsError` after all three drafts exist. It enters
+  host-audited `draft_quality_correction`, preserves no conversational trust,
+  and emits the sanitized `model_resource_not_found` reason. The same raw
+  400/404 response before complete drafts remains terminal. Focused transport,
+  API-redaction, and CLI tests pass 148/148 with one intentional platform skip
+  and 1,429 assertions.
+- Two independently built post-draft-recovery packages are identical at 299
+  entries and 2,582,905 bytes with SHA-256
+  `5a4e5f236d12019c79d9f2b4fb1eb6bb3656e04801f4481767ee27710af90034`.
+  Strict isolated installation again validates 67 production packages, the
+  public import, executable CLI, and all 79 bundled plugin files.
 - Closed a measured Express credentialed-CORS false negative. A route that
   reflects an arbitrary request Origin, enables credentials, activates
   `express-session`, and returns session-derived data previously produced no

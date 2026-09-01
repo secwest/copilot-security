@@ -210,6 +210,7 @@ export interface ScanReconnectDetails {
     | "authorization"
     | "model_timeout"
     | "transport_interrupted"
+    | "model_resource_not_found"
     | "safety_filter_refusal"
     | "closure_incomplete";
   retryAfterSeconds?: number;
@@ -1726,6 +1727,7 @@ export async function runScanEvents(
           [
             "model_timeout",
             "transport_interrupted",
+            "model_resource_not_found",
             "safety_filter_refusal",
             "closure_incomplete",
           ].includes(event["reason"])
@@ -1740,6 +1742,7 @@ export async function runScanEvents(
               reason: event["reason"] as
                 | "model_timeout"
                 | "transport_interrupted"
+                | "model_resource_not_found"
                 | "safety_filter_refusal"
                 | "closure_incomplete",
               ...([

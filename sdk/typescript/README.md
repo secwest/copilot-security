@@ -351,10 +351,10 @@ The package is ESM-only and provides:
   then use the existing isolated-session budget, and partially initialized CLI
   sessions retain cancellation-safe cleanup
 - up to three isolated Copilot sessions by default after hard model-turn
-  deadlines, recognized transport interruptions, or typed safety-refusal
-  exhaustion, with untrusted-draft recovery over the same immutable snapshot,
-  bounded disconnects, and cumulative root/subagent cost accounting across
-  attempts
+  deadlines, recognized transport interruptions, typed safety-refusal
+  exhaustion, or exact provider resource loss after all three drafts exist,
+  with untrusted-draft recovery over the same immutable snapshot, bounded
+  disconnects, and cumulative root/subagent cost accounting across attempts
 - bounded, data-only normalization of complete flow-style model drafts before
   deterministic sealing; aliases, duplicate keys, ambiguous syntax, symlinks,
   and non-object roots remain terminal, and canonical schemas still decide
@@ -437,12 +437,14 @@ includes subagent use; Copilot CLI requires an explicit limit of at least `30`.
 fresh-session recovery. Scanner-owned model-turn deadlines, recognized
 transport interruptions, host-proven closure gaps, and the typed result of
 exhausting all six same-session safety prompt attempts can open a new session.
-Raw classifier text cannot. Authentication, authorization, contract, sandbox,
-cancellation, and cost-limit failures remain terminal. A new session receives
-the original scan contract, re-consumes the immutable host inventory, and
-treats existing artifacts as untrusted partial drafts. A safety replacement
-adds a local-only defensive preamble and still undergoes every host validation.
-When all three drafts already exist, a retryable
+An exact provider 400/404 resource-not-found response can do so only inside the
+typed complete-draft boundary; the same raw response before all drafts exist
+cannot retry. Raw classifier text cannot retry either. Authentication,
+authorization, contract, sandbox, cancellation, and cost-limit failures remain
+terminal. A new session receives the original scan contract, re-consumes the
+immutable host inventory, and treats existing artifacts as untrusted partial
+drafts. A safety replacement adds a local-only defensive preamble and still
+undergoes every host validation. When all three drafts already exist, a retryable
 deadline or transport failure instead enters `draft_quality_correction`: the
 replacement session skips full scan replay, consumes freshly computed
 residual-risk, secret-candidate, coverage-gap, and finding-quality inventories,

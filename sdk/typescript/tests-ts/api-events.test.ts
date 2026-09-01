@@ -735,6 +735,14 @@ describe("one-shot scan events", () => {
       };
       yield {
         type: "copilot.fresh_session_retry",
+        attempt: 3,
+        max_attempts: 5,
+        reason: "model_resource_not_found",
+        recovery_phase: "draft_quality_correction",
+        provider_error: "private resource identifier",
+      };
+      yield {
+        type: "copilot.fresh_session_retry",
         attempt: 999,
         max_attempts: 999,
         reason: "model_timeout",
@@ -786,10 +794,21 @@ describe("one-shot scan events", () => {
           phase: "scan",
         },
       },
+      {
+        attempt: 3,
+        maximum: 5,
+        details: {
+          reason: "model_resource_not_found",
+          phase: "draft_quality_correction",
+        },
+      },
     ]);
     expect(JSON.stringify(reconnects)).not.toContain("private provider detail");
     expect(JSON.stringify(reconnects)).not.toContain(
       "private classifier detail",
+    );
+    expect(JSON.stringify(reconnects)).not.toContain(
+      "private resource identifier",
     );
     expect(JSON.stringify(reconnects)).not.toContain("474");
   });

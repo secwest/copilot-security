@@ -861,6 +861,7 @@ export async function sendCopilotTurnWithDeadline(
 export type FreshSessionRetryReason =
   | "model_timeout"
   | "transport_interrupted"
+  | "model_resource_not_found"
   | "safety_filter_refusal"
   | "closure_incomplete";
 
@@ -974,7 +975,10 @@ export async function runWithFreshCopilotSessions<T>(options: {
       options.signal?.throwIfAborted();
       const draftRecoveryReason =
         error instanceof CompleteDraftArtifactsError
-          ? freshSessionRetryReason(error.cause)
+          ? freshSessionRetryReason(error.cause) ??
+            (isPostDraftResourceNotFound(error.cause)
+              ? "model_resource_not_found"
+              : null)
           : null;
       const closureTransportReason =
         error instanceof ScanClosureIncompleteError
