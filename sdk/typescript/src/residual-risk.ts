@@ -4722,6 +4722,21 @@ const NODE_FASTIFY_OPEN_REDIRECT_FIELD_EVIDENCE_REQUIREMENTS = [
   ["CWE-601", "open redirect", "URL redirection"],
 ] as const;
 
+const NODE_FASTIFY_AUTH_RATE_LIMIT_FIELD_EVIDENCE_REQUIREMENTS = [
+  ["Fastify 4", "Fastify 5", "Fastify application", "literal route"],
+  ["request.body.password", "password field", "remote credential"],
+  ["bcrypt", "bcryptjs", "argon2", "password verification"],
+  ["@fastify/rate-limit", "fastify-rate-limit", "plugin registration"],
+  [
+    "config.rateLimit",
+    "global: false",
+    "registration order",
+    "inert configuration",
+  ],
+  ["repeated attempts", "password guesses", "authentication throttling"],
+  ["CWE-307", "CWE-400", "CWE-770"],
+] as const;
+
 const NODE_VUE_ROUTER_CLIENT_REQUEST_FORGERY_FIELD_EVIDENCE_REQUIREMENTS = [
   ["Vue Router 4", "Vue Router 5", "vue-router", "useRoute"],
   [
@@ -4902,6 +4917,13 @@ const MODEL_SPECIFIC_FINDING_REQUIREMENTS: ReadonlyMap<
     {
       validation: NODE_FASTIFY_OPEN_REDIRECT_FIELD_EVIDENCE_REQUIREMENTS,
       attackPath: NODE_FASTIFY_OPEN_REDIRECT_FIELD_EVIDENCE_REQUIREMENTS,
+    },
+  ],
+  [
+    "node-fastify-authentication-missing-rate-limit",
+    {
+      validation: NODE_FASTIFY_AUTH_RATE_LIMIT_FIELD_EVIDENCE_REQUIREMENTS,
+      attackPath: NODE_FASTIFY_AUTH_RATE_LIMIT_FIELD_EVIDENCE_REQUIREMENTS,
     },
   ],
   [
@@ -5266,6 +5288,9 @@ export async function buildResidualRiskInventory(
   records.push(...nodeNextJsDynamicRouteAuthorizationRecords(sourceFiles));
   records.push(...nodeExpressOpenRedirectRecords(sourceFiles));
   records.push(...nodeFastifyOpenRedirectRecords(sourceFiles));
+  records.push(
+    ...nodeFastifyAuthenticationMissingRateLimitRecords(sourceFiles),
+  );
   records.push(...nodeVueRouterClientRequestForgeryRecords(sourceFiles));
   records.push(...nodeAngularHostListenerMissingOriginRecords(sourceFiles));
   records.push(...nodeBrowserPostMessageDisclosureRecords(sourceFiles));
@@ -26186,6 +26211,751 @@ function nodeFastifyOpenRedirectRecords(
             });
             if (records.length >= MAX_FRAMEWORK_CROSS_FILE_RECORDS)
               return records;
+          }
+        }
+      }
+    }
+  }
+  return records;
+}
+
+interface NodeFastifyAuthenticationRoute {
+  endLine: number;
+  handlerExpression: string;
+  line: number;
+  method: string;
+  optionsExpression?: string;
+  path: string;
+}
+
+interface NodeFastifyAuthenticationHandler {
+  endLine: number;
+  parameters: string[];
+  request: string;
+  startLine: number;
+  symbol?: string;
+}
+
+function nodeFastifyAuthenticationRoutes(
+  file: SourceFileSnapshot,
+  instance: NodeFastifyInstanceBinding,
+): NodeFastifyAuthenticationRoute[] {
+  const routes: NodeFastifyAuthenticationRoute[] = [];
+  const structural = javascriptStructuralLines(file.lines).join("\n");
+  const escapedInstance = escapeRegularExpression(instance.local);
+  for (const method of [
+    "all",
+    "delete",
+    "get",
+    "head",
+    "options",
+    "patch",
+    "post",
+    "put",
+  ]) {
+    for (const call of javascriptCallsInText(
+      file.text,
+      structural,
+      1,
+      new RegExp(`\\b${escapedInstance}\\s*\\.\\s*${method}\\s*\\(`, "u"),
+    )) {
+      const arguments_ = [...call.arguments];
+      while (arguments_.at(-1)?.trim() === "") arguments_.pop();
+      const path = nodeStaticString(arguments_[0]);
+      if (path === undefined || arguments_.length < 2) continue;
+      routes.push({
+        endLine:
+          1 + (structural.slice(0, call.close).match(/\n/gu)?.length ?? 0),
+        handlerExpression: arguments_.at(-1)!.trim(),
+        line: call.line,
+        method: method.toUpperCase(),
+        optionsExpression:
+          arguments_.length >= 3 ? arguments_[1]?.trim() : undefined,
+        path,
+      });
+    }
+  }
+  for (const call of javascriptCallsInText(
+    file.text,
+    structural,
+    1,
+    new RegExp(`\\b${escapedInstance}\\s*\\.\\s*route\\s*\\(`, "u"),
+  )) {
+    const argument = call.arguments[0];
+    if (argument === undefined) continue;
+    const resolved = resolveJavascriptExpression(
+      file.lines,
+      argument,
+      call.line,
+    );
+    if (resolved === undefined) continue;
+    const method = nodeStaticString(
+      javascriptObjectPropertyValue(resolved.value, "method"),
+    );
+    const path = nodeStaticString(
+      javascriptObjectPropertyValue(resolved.value, "url") ??
+        javascriptObjectPropertyValue(resolved.value, "path"),
+    );
+    const handler = javascriptObjectPropertyValue(resolved.value, "handler");
+    if (method === undefined || path === undefined || handler === undefined) {
+      continue;
+    }
+    routes.push({
+      endLine: 1 + (structural.slice(0, call.close).match(/\n/gu)?.length ?? 0),
+      handlerExpression: handler,
+      line: call.line,
+      method: method.toUpperCase(),
+      optionsExpression: resolved.value,
+      path,
+    });
+  }
+  return routes;
+}
+
+function nodeFastifyAuthenticationParameters(value: string): string[] {
+  const trimmed = value.trim();
+  const parenthesized = /^(?:async\s+)?\(\s*([^)]*)\)\s*(?::[^=]+)?=>/su.exec(
+    trimmed,
+  );
+  const single = /^(?:async\s+)?([A-Za-z_$][\w$]*)\s*=>/su.exec(trimmed);
+  const functionExpression =
+    /^(?:async\s+)?function(?:\s+[A-Za-z_$][\w$]*)?\s*\(\s*([^)]*)\)/su.exec(
+      trimmed,
+    );
+  const raw = parenthesized?.[1] ?? single?.[1] ?? functionExpression?.[1];
+  if (raw === undefined) return [];
+  return raw
+    .split(",")
+    .map((parameter) =>
+      parameter
+        .trim()
+        .replace(/\s*=.*$/su, "")
+        .replace(/\??\s*:\s*.*$/su, "")
+        .trim(),
+    )
+    .filter((parameter) => /^[A-Za-z_$][\w$]*$/u.test(parameter));
+}
+
+function nodeFastifyAuthenticationHandler(
+  lines: readonly string[],
+  route: NodeFastifyAuthenticationRoute,
+): NodeFastifyAuthenticationHandler | undefined {
+  const inlineParameters = nodeFastifyAuthenticationParameters(
+    route.handlerExpression,
+  );
+  if (inlineParameters.length > 0) {
+    return {
+      endLine: route.endLine,
+      parameters: inlineParameters,
+      request: inlineParameters[0]!,
+      startLine: route.line,
+    };
+  }
+  const symbol = route.handlerExpression.trim();
+  if (!/^[A-Za-z_$][\w$]*$/u.test(symbol)) return undefined;
+  const escaped = escapeRegularExpression(symbol);
+  for (let index = 0; index < route.line; index += 1) {
+    const original = javascriptCodeLinesWithoutComments(
+      lines.slice(index, Math.min(lines.length, index + 8)),
+    ).join("\n");
+    const functionDeclaration = new RegExp(
+      `^\\s*(?:async\\s+)?function\\s+${escaped}\\s*\\(`,
+      "u",
+    );
+    const arrowDeclaration = new RegExp(
+      `^\\s*const\\s+${escaped}(?:\\s*:[^=]+)?\\s*=\\s*`,
+      "u",
+    );
+    if (
+      !functionDeclaration.test(original) &&
+      !arrowDeclaration.test(original)
+    ) {
+      continue;
+    }
+    if (arrowDeclaration.test(original) && index + 1 >= route.line) continue;
+    const signature = original.replace(arrowDeclaration, "");
+    const parameters = nodeFastifyAuthenticationParameters(signature);
+    if (parameters.length === 0) continue;
+    return {
+      endLine: javascriptFunctionEndLine(lines, index),
+      parameters,
+      request: parameters[0]!,
+      startLine: index + 1,
+      symbol,
+    };
+  }
+  return undefined;
+}
+
+interface NodeFastifyPasswordVerifierBinding {
+  dependency: NodeRuntimeDependency;
+  importedLine: number;
+  kind: "function" | "receiver";
+  local: string;
+  moduleName: "argon2" | "bcrypt" | "bcryptjs";
+  operation: "compare" | "compareSync" | "verify";
+  sourceArgument: number;
+}
+
+function nodeFastifyPasswordVerifierBindings(
+  files: readonly SourceFileSnapshot[],
+  file: SourceFileSnapshot,
+): NodeFastifyPasswordVerifierBinding[] {
+  const bindings: NodeFastifyPasswordVerifierBinding[] = [];
+  for (const moduleName of ["bcrypt", "bcryptjs", "argon2"] as const) {
+    const dependency = nodeRuntimeDependency(files, file.path, moduleName);
+    if (dependency === undefined) continue;
+    const receiverOperations =
+      moduleName === "argon2"
+        ? ([{ operation: "verify", sourceArgument: 1 }] as const)
+        : ([
+            { operation: "compare", sourceArgument: 0 },
+            { operation: "compareSync", sourceArgument: 0 },
+          ] as const);
+    for (let index = 0; index < file.lines.length; index += 1) {
+      const code = javascriptCodeBeforeComment(file.lines[index] ?? "");
+      const escapedModule = escapeRegularExpression(moduleName);
+      const defaultImport = new RegExp(
+        `^\\s*import\\s+([A-Za-z_$][\\w$]*)\\s+from\\s+["']${escapedModule}["']`,
+        "u",
+      ).exec(code);
+      const namespaceImport = new RegExp(
+        `^\\s*import\\s+\\*\\s+as\\s+([A-Za-z_$][\\w$]*)\\s+from\\s+["']${escapedModule}["']`,
+        "u",
+      ).exec(code);
+      const importEquals = new RegExp(
+        `^\\s*import\\s+([A-Za-z_$][\\w$]*)\\s*=\\s*require\\s*\\(\\s*["']${escapedModule}["']\\s*\\)`,
+        "u",
+      ).exec(code);
+      const requireBinding = new RegExp(
+        `^\\s*(?:const|let|var)\\s+([A-Za-z_$][\\w$]*)\\s*=\\s*require\\s*\\(\\s*["']${escapedModule}["']\\s*\\)`,
+        "u",
+      ).exec(code);
+      const local =
+        defaultImport?.[1] ??
+        namespaceImport?.[1] ??
+        importEquals?.[1] ??
+        requireBinding?.[1];
+      if (local === undefined) continue;
+      for (const operation of receiverOperations) {
+        bindings.push({
+          dependency,
+          importedLine: index + 1,
+          kind: "receiver",
+          local,
+          moduleName,
+          operation: operation.operation,
+          sourceArgument: operation.sourceArgument,
+        });
+      }
+    }
+    for (const imported of importedJavascriptSymbols(file.lines)) {
+      if (imported.moduleSpecifier !== moduleName) continue;
+      const operation = receiverOperations.find(
+        (candidate) => candidate.operation === imported.imported,
+      );
+      if (operation === undefined) continue;
+      bindings.push({
+        dependency,
+        importedLine: imported.line,
+        kind: "function",
+        local: imported.local,
+        moduleName,
+        operation: operation.operation,
+        sourceArgument: operation.sourceArgument,
+      });
+    }
+  }
+  return bindings;
+}
+
+interface NodeFastifyRateLimitPluginBinding {
+  dependency: NodeRuntimeDependency;
+  importedLine: number;
+  local: string;
+  moduleName: "@fastify/rate-limit" | "fastify-rate-limit";
+}
+
+interface NodeFastifyRateLimitRegistration {
+  dependency: NodeRuntimeDependency;
+  globalEnabled: boolean;
+  line: number;
+  moduleName: "@fastify/rate-limit" | "fastify-rate-limit";
+}
+
+function nodeFastifyRateLimitPluginBindings(
+  files: readonly SourceFileSnapshot[],
+  file: SourceFileSnapshot,
+): NodeFastifyRateLimitPluginBinding[] {
+  const bindings: NodeFastifyRateLimitPluginBinding[] = [];
+  for (const moduleName of [
+    "@fastify/rate-limit",
+    "fastify-rate-limit",
+  ] as const) {
+    const dependency = nodeRuntimeDependency(files, file.path, moduleName);
+    if (dependency === undefined) continue;
+    const escapedModule = escapeRegularExpression(moduleName);
+    for (let index = 0; index < file.lines.length; index += 1) {
+      const code = javascriptCodeBeforeComment(file.lines[index] ?? "");
+      const defaultImport = new RegExp(
+        `^\\s*import\\s+([A-Za-z_$][\\w$]*)\\s+from\\s+["']${escapedModule}["']`,
+        "u",
+      ).exec(code);
+      const namespaceImport = new RegExp(
+        `^\\s*import\\s+\\*\\s+as\\s+([A-Za-z_$][\\w$]*)\\s+from\\s+["']${escapedModule}["']`,
+        "u",
+      ).exec(code);
+      const importEquals = new RegExp(
+        `^\\s*import\\s+([A-Za-z_$][\\w$]*)\\s*=\\s*require\\s*\\(\\s*["']${escapedModule}["']\\s*\\)`,
+        "u",
+      ).exec(code);
+      const requireBinding = new RegExp(
+        `^\\s*(?:const|let|var)\\s+([A-Za-z_$][\\w$]*)\\s*=\\s*require\\s*\\(\\s*["']${escapedModule}["']\\s*\\)`,
+        "u",
+      ).exec(code);
+      const local =
+        defaultImport?.[1] ??
+        namespaceImport?.[1] ??
+        importEquals?.[1] ??
+        requireBinding?.[1];
+      if (local !== undefined) {
+        bindings.push({
+          dependency,
+          importedLine: index + 1,
+          local,
+          moduleName,
+        });
+      }
+    }
+  }
+  return bindings;
+}
+
+function nodeFastifyRateLimitRegistrations(
+  files: readonly SourceFileSnapshot[],
+  file: SourceFileSnapshot,
+  instance: NodeFastifyInstanceBinding,
+): NodeFastifyRateLimitRegistration[] {
+  const registrations: NodeFastifyRateLimitRegistration[] = [];
+  const structural = javascriptStructuralLines(file.lines).join("\n");
+  const bindings = nodeFastifyRateLimitPluginBindings(files, file);
+  for (const call of javascriptCallsInText(
+    file.text,
+    structural,
+    1,
+    new RegExp(
+      `\\b${escapeRegularExpression(instance.local)}\\s*\\.\\s*register\\s*\\(`,
+      "u",
+    ),
+  )) {
+    const plugin = call.arguments[0]?.trim();
+    if (plugin === undefined) continue;
+    let match = bindings.find(
+      (binding) =>
+        plugin === binding.local &&
+        binding.importedLine < call.line &&
+        !javascriptIdentifierReassignedBetween(
+          file.lines,
+          binding.local,
+          binding.importedLine,
+          call.line,
+        ),
+    );
+    if (match === undefined) {
+      const direct =
+        /^(?:require|import)\s*\(\s*["'](@fastify\/rate-limit|fastify-rate-limit)["']\s*\)$/u.exec(
+          plugin,
+        );
+      const moduleName = direct?.[1] as
+        | "@fastify/rate-limit"
+        | "fastify-rate-limit"
+        | undefined;
+      const dependency =
+        moduleName === undefined
+          ? undefined
+          : nodeRuntimeDependency(files, file.path, moduleName);
+      if (moduleName !== undefined && dependency !== undefined) {
+        match = {
+          dependency,
+          importedLine: call.line,
+          local: plugin,
+          moduleName,
+        };
+      }
+    }
+    if (match === undefined) continue;
+    const options = call.arguments[1];
+    const resolved =
+      options === undefined
+        ? undefined
+        : resolveJavascriptExpression(file.lines, options, call.line);
+    const global =
+      resolved === undefined
+        ? undefined
+        : javascriptObjectPropertyValue(resolved.value, "global");
+    registrations.push({
+      dependency: match.dependency,
+      globalEnabled: global?.trim() !== "false",
+      line: call.line,
+      moduleName: match.moduleName,
+    });
+  }
+  return registrations;
+}
+
+interface NodeFastifyRouteRateLimitSetting {
+  disabled: boolean;
+  line: number;
+  present: boolean;
+}
+
+function nodeFastifyRouteRateLimitSetting(
+  lines: readonly string[],
+  route: NodeFastifyAuthenticationRoute,
+): NodeFastifyRouteRateLimitSetting {
+  if (route.optionsExpression === undefined) {
+    return { disabled: false, line: route.line, present: false };
+  }
+  const options = resolveJavascriptExpression(
+    lines,
+    route.optionsExpression,
+    route.line,
+  );
+  if (options === undefined) {
+    return { disabled: false, line: route.line, present: false };
+  }
+  let value = javascriptObjectPropertyValue(options.value, "rateLimit");
+  if (value === undefined) {
+    const config = javascriptObjectPropertyValue(options.value, "config");
+    const resolvedConfig =
+      config === undefined
+        ? undefined
+        : resolveJavascriptExpression(lines, config, options.line);
+    value =
+      resolvedConfig === undefined
+        ? undefined
+        : javascriptObjectPropertyValue(resolvedConfig.value, "rateLimit");
+  }
+  return {
+    disabled: value?.trim() === "false",
+    line: options.line,
+    present: value !== undefined,
+  };
+}
+
+function nodeFastifyAuthenticationMissingRateLimitRecords(
+  files: readonly SourceFileSnapshot[],
+): ResidualRiskRecord[] {
+  const records: ResidualRiskRecord[] = [];
+  const emitted = new Set<string>();
+  for (const file of files) {
+    if (
+      !JAVASCRIPT_EXTENSIONS.has(file.extension) ||
+      javascriptTestOrExamplePath(file.path)
+    ) {
+      continue;
+    }
+    const fastifyDependency = nodeRuntimeDependency(
+      files,
+      file.path,
+      "fastify",
+    );
+    const fastifyMajor = Number(fastifyDependency?.version.split(".")[0]);
+    if (
+      fastifyDependency === undefined ||
+      (fastifyMajor !== 4 && fastifyMajor !== 5)
+    ) {
+      continue;
+    }
+    const factoryBindings = nodeFastifyFactoryBindings(file.lines);
+    const verifierBindings = nodeFastifyPasswordVerifierBindings(files, file);
+    if (verifierBindings.length === 0) continue;
+    for (const instance of nodeFastifyInstanceBindings(file.lines)) {
+      const escapedInstance = escapeRegularExpression(instance.local);
+      const registrations = nodeFastifyRateLimitRegistrations(
+        files,
+        file,
+        instance,
+      );
+      for (const route of nodeFastifyAuthenticationRoutes(file, instance)) {
+        if (route.line <= instance.line) continue;
+        const factory = factoryBindings.find(
+          (binding) => binding.line === instance.factoryLine,
+        );
+        if (
+          javascriptIdentifierReassignedBetween(
+            file.lines,
+            instance.local,
+            instance.line,
+            route.line,
+          ) ||
+          (factory !== undefined &&
+            javascriptIdentifierReassignedBetween(
+              file.lines,
+              factory.local,
+              factory.line,
+              route.line,
+            )) ||
+          file.lines
+            .slice(instance.line, route.line - 1)
+            .some((line) =>
+              new RegExp(
+                `\\b${escapedInstance}\\s*\\.\\s*(?:all|delete|get|head|options|patch|post|put|route|register)\\s*=`,
+                "u",
+              ).test(javascriptCodeBeforeComment(line)),
+            )
+        ) {
+          continue;
+        }
+        const handler = nodeFastifyAuthenticationHandler(file.lines, route);
+        if (handler === undefined) continue;
+        if (
+          handler.symbol !== undefined &&
+          javascriptIdentifierReassignedBetween(
+            file.lines,
+            handler.symbol,
+            handler.startLine,
+            route.line,
+          )
+        ) {
+          continue;
+        }
+        const setting = nodeFastifyRouteRateLimitSetting(file.lines, route);
+        const registrationsBeforeRoute = registrations.filter(
+          (registration) => registration.line < route.line,
+        );
+        const manualHook =
+          route.optionsExpression !== undefined &&
+          new RegExp(
+            `\\b${escapedInstance}\\s*\\.\\s*rateLimit\\s*\\(`,
+            "u",
+          ).test(route.optionsExpression);
+        const effectivelyLimited =
+          !setting.disabled &&
+          ((setting.present && registrationsBeforeRoute.length > 0) ||
+            (manualHook && registrationsBeforeRoute.length > 0) ||
+            (!setting.present &&
+              registrationsBeforeRoute.some(
+                (registration) => registration.globalEnabled,
+              )));
+        if (effectivelyLimited) continue;
+
+        const handlerLines = file.lines.slice(
+          handler.startLine - 1,
+          handler.endLine,
+        );
+        const handlerText = handlerLines.join("\n");
+        const handlerStructural =
+          javascriptStructuralLines(handlerLines).join("\n");
+        const escapedRequest = escapeRegularExpression(handler.request);
+        const sourcePatterns: FrameworkModelPattern[] = [
+          {
+            kind: "fastify-request-body-password",
+            expression: new RegExp(
+              `\\b${escapedRequest}\\s*\\.\\s*body\\s*(?:\\.\\s*(?:password|passwd|passcode|pin)\\b|\\[\\s*["'](?:password|passwd|passcode|pin)["']\\s*\\])`,
+              "iu",
+            ),
+          },
+        ];
+        const sources = matchingJavascriptModelLines(
+          file.lines,
+          sourcePatterns,
+          16,
+        ).filter(
+          ({ line }) => line >= handler.startLine && line <= handler.endLine,
+        );
+        if (sources.length === 0) continue;
+        for (const verifier of verifierBindings) {
+          if (
+            verifier.importedLine >= route.line ||
+            handler.parameters.includes(verifier.local) ||
+            javascriptIdentifierReassignedBetween(
+              file.lines,
+              verifier.local,
+              verifier.importedLine,
+              Math.max(route.line, handler.endLine),
+            )
+          ) {
+            continue;
+          }
+          const escapedVerifier = escapeRegularExpression(verifier.local);
+          const callee =
+            verifier.kind === "receiver"
+              ? new RegExp(
+                  `\\b${escapedVerifier}\\s*\\.\\s*${verifier.operation}\\s*\\(`,
+                  "u",
+                )
+              : new RegExp(`\\b${escapedVerifier}\\s*\\(`, "u");
+          for (const call of javascriptCallsInText(
+            handlerText,
+            handlerStructural,
+            handler.startLine,
+            callee,
+          )) {
+            const sourceArgument = call.arguments[verifier.sourceArgument];
+            if (sourceArgument === undefined || sourceArgument.trim() === "") {
+              continue;
+            }
+            const prefix = handlerStructural.slice(0, call.start);
+            if (
+              nodeExpressBindingAssignedInText(prefix, handler.request) ||
+              (verifier.kind === "receiver" &&
+                new RegExp(
+                  `\\b${escapedVerifier}\\s*\\.\\s*${verifier.operation}\\s*=`,
+                  "u",
+                ).test(
+                  javascriptStructuralLines(
+                    file.lines.slice(verifier.importedLine, call.line - 1),
+                  ).join("\n"),
+                ))
+            ) {
+              continue;
+            }
+            const source = nodeExpressModeledRedirectSource(
+              file.lines,
+              sources,
+              call.line,
+              sourceArgument.trim(),
+              sourcePatterns,
+            );
+            if (source === undefined) continue;
+            const key = `${file.path}\0${route.line}\0${source.line}\0${call.line}`;
+            if (emitted.has(key)) continue;
+            emitted.add(key);
+            const startLine = Math.max(1, call.line - CONTEXT_LINES_BEFORE);
+            const endLine = Math.min(
+              file.lines.length,
+              call.line + CONTEXT_LINES_AFTER,
+            );
+            const propagators: NonNullable<
+              ResidualRiskRecord["frameworkModel"]
+            >["propagators"] = [
+              {
+                kind: "fastify-factory-binding",
+                path: file.path,
+                line: instance.factoryLine,
+                symbol: instance.local,
+              },
+              {
+                kind: "fastify-literal-authentication-route",
+                path: file.path,
+                line: route.line,
+                symbol: `${route.method} ${route.path}`,
+              },
+              {
+                kind: "fastify-handler-request-binding",
+                path: file.path,
+                line: handler.startLine,
+                symbol: handler.request,
+              },
+              {
+                kind: "password-verifier-binding",
+                path: file.path,
+                line: verifier.importedLine,
+                symbol: `${verifier.moduleName}.${verifier.operation}`,
+              },
+              {
+                kind: "password-verifier-runtime-dependency",
+                path: verifier.dependency.manifestPath,
+                line: verifier.dependency.line,
+                symbol: `${verifier.moduleName}@${verifier.dependency.version}:${verifier.dependency.proof}`,
+              },
+              {
+                kind: "fastify-runtime-dependency",
+                path: fastifyDependency.manifestPath,
+                line: fastifyDependency.line,
+                symbol: `fastify@${fastifyDependency.version}:${fastifyDependency.proof}`,
+              },
+            ];
+            if (setting.present && registrationsBeforeRoute.length === 0) {
+              propagators.push({
+                kind: "unregistered-fastify-rate-limit-configuration",
+                path: file.path,
+                line: setting.line,
+                symbol: `${route.method} ${route.path}`,
+              });
+            }
+            const candidateControls: NonNullable<
+              ResidualRiskRecord["frameworkModel"]
+            >["candidateControls"] = [];
+            if (setting.present && registrationsBeforeRoute.length === 0) {
+              candidateControls.push({
+                kind: "inert-fastify-rate-limit-route-configuration",
+                path: file.path,
+                line: setting.line,
+              });
+            }
+            if (setting.disabled) {
+              candidateControls.push({
+                kind: "disabled-fastify-rate-limit-route-configuration",
+                path: file.path,
+                line: setting.line,
+              });
+            }
+            const lateRegistration = registrations.find(
+              (registration) => registration.line >= route.line,
+            );
+            if (lateRegistration !== undefined) {
+              candidateControls.push({
+                kind: "late-fastify-rate-limit-plugin-registration",
+                path: file.path,
+                line: lateRegistration.line,
+              });
+            }
+            const disabledGlobal = registrationsBeforeRoute.find(
+              (registration) => !registration.globalEnabled,
+            );
+            if (
+              disabledGlobal !== undefined &&
+              !setting.present &&
+              !manualHook
+            ) {
+              candidateControls.push({
+                kind: "disabled-global-fastify-rate-limit-registration",
+                path: file.path,
+                line: disabledGlobal.line,
+              });
+            }
+            records.push({
+              path: file.path,
+              line: call.line,
+              categories: [
+                "framework-dataflow:node-fastify-authentication-missing-rate-limit",
+                `modeled-source:${source.kind}`,
+                `modeled-sink:${verifier.moduleName}-password-verification-attempt`,
+              ],
+              priority: 116,
+              startLine,
+              endLine,
+              excerpt: sourceExcerpt(file.lines, startLine, endLine),
+              sourceExcerpt: sourceExcerpt(
+                file.lines,
+                Math.max(1, source.line - 1),
+                Math.min(file.lines.length, source.line + 1),
+              ),
+              frameworkModel: {
+                schemaVersion: "1.2",
+                id: "node-fastify-authentication-missing-rate-limit",
+                language: "javascript-typescript",
+                scope: "same-file",
+                source: {
+                  kind: source.kind,
+                  path: file.path,
+                  line: source.line,
+                },
+                sink: {
+                  kind: `${verifier.moduleName}-password-verification-attempt`,
+                  path: file.path,
+                  line: call.line,
+                  cweIds: ["CWE-307", "CWE-400", "CWE-770"],
+                },
+                propagators,
+                candidateControls,
+              },
+            });
+            if (records.length >= MAX_FRAMEWORK_CROSS_FILE_RECORDS) {
+              return records;
+            }
           }
         }
       }

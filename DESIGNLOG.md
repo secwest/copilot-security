@@ -2,6 +2,107 @@
 
 This log records consequential implementation decisions, their evidence, and the tradeoffs that future scanner work must preserve.
 
+## 2026-08-31 — Require live Fastify rate-limit activation at authentication verifiers
+
+**Measured gap and comparator.** A production Fastify 5 login route read
+`request.body.password` and passed it to `bcrypt.compare`. The route declared
+`config.rateLimit`, and the source imported `@fastify/rate-limit`, but it never
+registered that plugin. The configuration therefore had no consumer and all
+modeled attempts reached the verifier. The unchanged scanner emitted no
+specialized row: the new focused suite started at one pass and seven failures,
+with zero exploit records. CodeQL's high-precision
+[`js/missing-rate-limiting`](https://github.com/github/codeql/blob/main/javascript/ql/src/Security/CWE-770/MissingRateLimiting.ql)
+query identifies expensive actions that lack a modeled limiter. Its maintained
+[`MissingRateLimiting.qll`](https://github.com/github/codeql/blob/main/javascript/ql/lib/semmle/javascript/security/dataflow/MissingRateLimiting.qll)
+models Fastify limiter packages and per-route `config.rateLimit` or direct
+`rateLimit` properties. CodeQL 2.4.3 explicitly added
+[`@fastify/rate-limit` support](https://github.com/github/codeql/blob/main/javascript/ql/src/change-notes/released/2.4.3.md).
+The official
+[`fastify-rate-limit` documentation](https://github.com/fastify/fastify-rate-limit)
+states that registration installs the hook, that `global` defaults to true,
+that `global: false` requires route opt-in, and that a route can disable a
+global limiter with `rateLimit: false`.
+
+**Typed decision.** Emit
+`node-fastify-authentication-missing-rate-limit` only when all relevant
+boundaries are proven in one production JavaScript or TypeScript file. Require
+an exact runtime dependency on Fastify 4 or 5; a stable official default,
+named, import-equals, or CommonJS factory and application; a literal shorthand
+route or literal `route` object; a registered inline or named handler; the
+handler's exact request parameter; a `password`, `passwd`, `passcode`, or `pin`
+field below `request.body`; and flow into the correct source argument of a
+stable production `bcrypt.compare`, `bcrypt.compareSync`,
+`bcryptjs.compare`, `bcryptjs.compareSync`, or `argon2.verify` binding.
+Source, verifier call, dependency proof, route method/path, handler identity,
+and limiter state remain structured evidence.
+
+**Activation and ordering model.** A route option is effective only when the
+official scoped or legacy plugin is registered on the same stable application
+before route registration. A global registration protects later routes by
+default. `global: false` protects only a route with a non-false direct or
+nested rate-limit option, or an exact application rate-limit pre-handler.
+`rateLimit: false` disables protection even beneath a global registration.
+Direct `require`, dynamic `import`, and stable imported plugin bindings receive
+the same semantics. Import-only code, dependency-only code, a late
+registration, another application, disabled global mode without route opt-in,
+and an inert option remain reportable and are retained as candidate-control
+evidence rather than misrepresented as protection.
+
+**Precision improvement and deliberate bounds.** This scanner proves that the
+configuration has a live consumer; it does not infer activation from a
+property name. It also requires a concrete remote authentication-verifier
+boundary rather than every expensive route action. Fixed verifier inputs,
+request data in a different verifier argument, unresolved or development-only
+packages, local lookalikes, rebound factories/applications/requests/verifiers,
+overwritten route members, unregistered handlers, dynamic paths, tests, and
+examples fail closed. The model is deliberately same-file and recognizes
+static registration/configuration shapes. Cross-file Fastify plugin
+encapsulation, custom password verifiers, schema-destructured body values, and
+custom limiter plugins remain reviewer surfaces until equally strict identity,
+ordering, and dataflow proof can be added.
+
+**Reviewer and validation contract.** Validation and attack-path prose must
+name the Fastify version and route, remote password field, exact verifier
+package/call and argument, plugin registration state and order, route/global
+configuration, repeated-attempt path, CWE-307/CWE-400/CWE-770, and the
+strongest active countercontrol. The bounded witness answers only whether six
+modeled attempts reach the verifier. It starts no Fastify server, sends no
+network request, reads no credential, and performs no real password hashing.
+Deployment review must separately verify reachability, key derivation and
+trusted-proxy behavior, allowlists, `skipOnError`, maximum and window,
+distributed-store and worker/replica sharing, authentication result handling,
+response timing, and a concrete online-guessing or shared-resource effect. A
+cracked password, account takeover, user enumeration, outage, or public
+exposure cannot be inferred from the static row.
+
+**Benchmark and regression evidence.** The exploit and control pin Fastify
+5.12.1, `@fastify/rate-limit` 11.2.0, and bcryptjs 3.0.2, and differ at the
+activation boundary. Their offline witnesses report six verifier calls and no
+rejection for the inert route versus five verifier calls and one rejected
+sixth attempt for the control. The specialized manifest has perfect positive,
+negative, stability, narrative, and evidence gates. Eight focused tests pass
+with 37 assertions across route and package forms, ordering and enablement
+states, all three verifier families, adversarial lookalikes/reassignment, path
+exclusions, field evidence, and reviewer instructions. The canonical corpus
+now contains 210 exploit/control pairs, 420 cases, and 1,260 repeated scan
+positions.
+
+**Acceptance evidence.** The full Windows run records 2,271 passes, 31
+intentional skips, and 17,531 assertions across 2,304 tests and 224 files in
+1,008.60 seconds. Its two restricted-session failures—the inherited Git-hook
+fixture and private credential-home ACL—pass in a 48/48 native rerun.
+Formatting, generated models, TypeScript, production build, package
+installation, and production audit pass. The 299-entry, 2,547,492-byte package
+has SHA-256
+`a1b8ce09a35d51110439aa2944fe52b943e6bf1a953bd23f62f7728f9b2467f8`
+and validates 67 packages plus all 79 plugin files. Two compiled self
+inventories are byte-identical at 256 rows and 641,231 bytes with SHA-256
+`b1f7f9cc8f06c4a4e3b487297b7a6aef54086965775fc8f2b20280e089124cbf`;
+only the inert Fastify fixture produces the new row. Windows desktop and
+Ubuntu/WSL GUI builds, execution-core/shared/headless tests, self-contained
+publication, and non-graphical plus X11 startup all pass. The scanner
+effectiveness goal remains active.
+
 ## 2026-08-31 — Bound sensitive browser messages to exact receiver origins
 
 **Measured gap and comparator.** A minimal production JavaScript bridge read

@@ -719,6 +719,10 @@ describe("effectiveness benchmark", () => {
         "node-browser-postmessage-fixed-origin-sensitive-data",
       ],
       [
+        "node-fastify-auth-inert-rate-limit",
+        "node-fastify-auth-enforced-rate-limit",
+      ],
+      [
         "python-flask-post-open-redirect",
         "python-flask-post-safe-local-redirect",
       ],

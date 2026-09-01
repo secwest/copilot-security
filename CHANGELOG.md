@@ -6,6 +6,70 @@ All notable scanner, application, benchmark, and operational changes are recorde
 
 ### Scanner effectiveness
 
+- Closed a measured Fastify authentication-rate-limit false negative. The
+  unchanged scanner emitted no structured row when a production login route
+  passed `request.body.password` to `bcrypt.compare` behind an inert
+  `config.rateLimit` object whose plugin was imported but never registered.
+  Before implementation, the new focused suite recorded one pass and seven
+  failures with zero exploit rows; the topology-matched activated-plugin
+  control remained unreported.
+- Added the bounded
+  `node-fastify-authentication-missing-rate-limit` model with CWE-307,
+  CWE-400, and CWE-770 evidence. It requires an exact production Fastify 4 or
+  5 dependency and stable factory/application, a literal shorthand or route
+  object, a registered handler and exact request identity, a remote
+  `request.body` password/passcode field, and a stable production
+  `bcrypt`, `bcryptjs`, or `argon2` verifier binding with the correct argument
+  role.
+- Limiter configuration is credited only when `@fastify/rate-limit` or legacy
+  `fastify-rate-limit` is registered on the same application before the
+  route. Global registration protects later routes unless the route sets
+  `rateLimit: false`; `global: false` protects only routes with an enabled
+  direct or `config.rateLimit` option or exact manual hook. Package presence,
+  import-only use, another application, late registration, `global: false`
+  alone, disabled route options, and 429-looking response code do not suppress
+  the candidate. This activation proof is stricter than a property-presence
+  interpretation of CodeQL's per-route model.
+- Added a pinned Fastify 5.12.1, `@fastify/rate-limit` 11.2.0, and bcryptjs
+  3.0.2 exploit/control pair. Offline witnesses make six bounded modeled
+  attempts without starting a server, using a credential, or hashing a real
+  password: all six reach the inert verifier, while the activated control
+  admits five and rejects the sixth. The specialized manifest requires
+  perfect precision, recall, stability, narrative quality, code evidence, and
+  zero false positives. The canonical corpus advances to 210 pairs, 420
+  cases, and 1,260 repeated scan positions.
+- Eight focused tests cover route shorthands and objects, direct and nested
+  options, global and disabled-global registration, disabled routes,
+  registration order, ESM/CommonJS/dynamic plugin forms, bcrypt/bcryptjs/
+  argon2 bindings, fixed credentials, local lookalikes, development-only
+  dependencies, reassignment, path exclusions, narrative evidence, and the
+  reviewer contract. All eight pass with 37 assertions after the measured red
+  baseline.
+- The complete Windows regression lane records 2,271 passes, 31 intentional
+  platform/real-service skips, 17,531 assertions, and two managed-environment
+  failures across 2,304 tests and 224 files in 1,008.60 seconds. The exact
+  inherited-Git-hook and private Windows credential-home files pass 48/48
+  when rerun at their required native filesystem boundary. Formatting,
+  generated-model drift, TypeScript, the clean production build, and the
+  production advisory audit are green.
+- The 299-entry npm archive is 2,547,492 bytes with SHA-256
+  `a1b8ce09a35d51110439aa2944fe52b943e6bf1a953bd23f62f7728f9b2467f8`.
+  An isolated install validates 67 production packages, the public import,
+  executable CLI, and all 79 bundled plugin files. No known production
+  dependency vulnerability is reported.
+- Two compiled whole-repository inventories are byte-identical at 256 rows and
+  641,231 bytes with SHA-256
+  `b1f7f9cc8f06c4a4e3b487297b7a6aef54086965775fc8f2b20280e089124cbf`.
+  Exactly one new row identifies the intentional inert Fastify route at
+  password source line 8 and bcryptjs verifier line 9; the activated control
+  is absent.
+- Windows builds with zero warnings/errors, passes 7/7 execution-core and 3/3
+  shared desktop tests, and publishes a 346,796-byte executable with SHA-256
+  `265b5a3f98b59f51316bf7d4571d9a627e3746d05288155118a360e50cf1fcc4`.
+  Ubuntu/WSL restores the locked graph, builds with zero warnings/errors,
+  passes those suites plus 2/2 headless Linux tests, and passes non-graphical
+  and X11/Xvfb startup. Its 72,568-byte executable has SHA-256
+  `7e29d642169a6c218c249216c6c10648307aea88faf636b69ac25741104b4adf`.
 - Closed a measured browser `postMessage` sensitive-data disclosure false
   negative. The unchanged scanner emitted no structured row when production
   JavaScript read the credential-shaped `localStorage` key `access_token` and

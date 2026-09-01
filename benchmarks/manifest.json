@@ -10552,6 +10552,84 @@
         "node-browser-postmessage-fixed-origin-sensitive-data/run-3/findings.json"
       ],
       "expected": []
+    },
+    {
+      "id": "node-fastify-auth-inert-rate-limit",
+      "description": "A Fastify login route declares per-route rateLimit settings but never registers the plugin, so remote password guesses keep reaching bcryptjs.",
+      "fixture": "fixtures/node-fastify-auth-inert-rate-limit",
+      "findingsPaths": [
+        "node-fastify-auth-inert-rate-limit/run-1/findings.json",
+        "node-fastify-auth-inert-rate-limit/run-2/findings.json",
+        "node-fastify-auth-inert-rate-limit/run-3/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "node-fastify-authentication-missing-rate-limit",
+          "cwe": ["CWE-307", "CWE-400", "CWE-770"],
+          "locations": [
+            {
+              "path": "src/server.js",
+              "startLine": 9,
+              "endLine": 9,
+              "lineTolerance": 1
+            }
+          ],
+          "acceptableSeverities": ["high", "medium"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true,
+          "requiredValidationTextAnyOf": [
+            ["Fastify 5", "fastify@5.12.1", "Fastify application"],
+            ["request.body.password", "password field", "remote credential"],
+            ["bcryptjs", "bcrypt.compare", "password verification"],
+            ["@fastify/rate-limit", "plugin registration", "registered plugin"],
+            [
+              "config.rateLimit",
+              "per-route configuration",
+              "inert configuration"
+            ],
+            ["CWE-307", "CWE-400", "CWE-770"]
+          ],
+          "requiredAttackPathTextAnyOf": [
+            ["POST /login", "/login route", "literal login route"],
+            [
+              "repeated requests",
+              "password guesses",
+              "authentication attempts"
+            ],
+            ["request.body.password", "password field", "remote credential"],
+            ["bcryptjs", "bcrypt.compare", "password verification"],
+            [
+              "plugin is not registered",
+              "missing plugin registration",
+              "inert rateLimit"
+            ],
+            ["six", "6", "fifth", "sixth"],
+            ["in-memory", "no network request", "starts no Fastify server"]
+          ],
+          "forbiddenText": [
+            "the witness made a network request",
+            "the witness started Fastify",
+            "proves a password was cracked",
+            "proves account takeover",
+            "proves the deployed route is publicly reachable",
+            "every Fastify route requires a rate limit",
+            "every bcrypt call is remotely reachable",
+            "the host is fully compromised"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "node-fastify-auth-enforced-rate-limit",
+      "description": "The topology-matched control registers the plugin before applying the same per-route authentication-attempt limit.",
+      "fixture": "fixtures/node-fastify-auth-enforced-rate-limit",
+      "findingsPaths": [
+        "node-fastify-auth-enforced-rate-limit/run-1/findings.json",
+        "node-fastify-auth-enforced-rate-limit/run-2/findings.json",
+        "node-fastify-auth-enforced-rate-limit/run-3/findings.json"
+      ],
+      "expected": []
     }
   ]
 }
