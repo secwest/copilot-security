@@ -713,6 +713,10 @@ describe("effectiveness benchmark", () => {
         "node-express-sensitive-cookie-cleartext",
         "node-express-sensitive-cookie-secure",
       ],
+      [
+        "node-express-credentialed-cors-reflection",
+        "node-express-credentialed-cors-allowlist",
+      ],
       ["node-fastify-open-redirect", "node-fastify-safe-local-redirect"],
       [
         "node-vue-router-client-request-forgery",

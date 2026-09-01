@@ -4731,6 +4731,20 @@ const NODE_EXPRESS_SENSITIVE_COOKIE_SECURE_FIELD_EVIDENCE_REQUIREMENTS = [
   ["CWE-614", "CWE-319", "clear text transmission"],
 ] as const;
 
+const NODE_EXPRESS_CREDENTIALED_CORS_FIELD_EVIDENCE_REQUIREMENTS = [
+  ["Express 4", "Express 5", "Express application", "Router"],
+  ["literal route", "GET /account", "registered handler"],
+  ["cors 2", "cors@2.8.6", "official cors"],
+  ["origin: true", 'origin: "null"', "reflected Origin"],
+  ["credentials: true", "Access-Control-Allow-Credentials"],
+  ["express-session 1", "express-session@1.19.0", "session middleware"],
+  ["request.session", "session-derived account data", "session response"],
+  ["browser JavaScript", "cross-origin script", "response readability"],
+  ["SameSite", "cookie policy", "third-party cookie"],
+  ["CORS is not authentication", "not authorization", "does not block"],
+  ["CWE-942", "CWE-346", "CWE-639"],
+] as const;
+
 const NODE_FASTIFY_OPEN_REDIRECT_FIELD_EVIDENCE_REQUIREMENTS = [
   ["Fastify 5", "Fastify application", "route shorthand", "registered route"],
   [
@@ -4952,6 +4966,13 @@ const MODEL_SPECIFIC_FINDING_REQUIREMENTS: ReadonlyMap<
         NODE_EXPRESS_SENSITIVE_COOKIE_SECURE_FIELD_EVIDENCE_REQUIREMENTS,
       attackPath:
         NODE_EXPRESS_SENSITIVE_COOKIE_SECURE_FIELD_EVIDENCE_REQUIREMENTS,
+    },
+  ],
+  [
+    "node-express-credentialed-cors-session-exposure",
+    {
+      validation: NODE_EXPRESS_CREDENTIALED_CORS_FIELD_EVIDENCE_REQUIREMENTS,
+      attackPath: NODE_EXPRESS_CREDENTIALED_CORS_FIELD_EVIDENCE_REQUIREMENTS,
     },
   ],
   [
@@ -5330,6 +5351,7 @@ export async function buildResidualRiskInventory(
   records.push(...nodeNextJsDynamicRouteAuthorizationRecords(sourceFiles));
   records.push(...nodeExpressOpenRedirectRecords(sourceFiles));
   records.push(...nodeExpressSensitiveCookieRecords(sourceFiles));
+  records.push(...nodeExpressCredentialedCorsRecords(sourceFiles));
   records.push(...nodeFastifyOpenRedirectRecords(sourceFiles));
   records.push(
     ...nodeFastifyAuthenticationMissingRateLimitRecords(sourceFiles),
@@ -26515,6 +26537,733 @@ function nodeExpressSensitiveCookieRecords(
                   secure,
                 );
               }
+              if (records.length >= MAX_FRAMEWORK_CROSS_FILE_RECORDS) {
+                return records;
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+  return records;
+}
+
+type NodeExpressSecurityMiddlewareModule = "cors" | "express-session";
+
+interface NodeExpressSecurityMiddlewareBinding {
+  dependency: NodeRuntimeDependency;
+  line: number;
+  local: string;
+  moduleSpecifier: NodeExpressSecurityMiddlewareModule;
+}
+
+interface NodeExpressSecurityMiddlewareInvocation {
+  argument: string;
+  binding: NodeExpressSecurityMiddlewareBinding;
+  kind: "global" | "route";
+  line: number;
+}
+
+interface NodeExpressCredentialedCorsPolicy {
+  credentialsLine: number;
+  originControlKind:
+    | "cors-null-origin-enabled"
+    | "cors-origin-callback-reflection-enabled"
+    | "cors-origin-reflection-enabled";
+  originLine: number;
+  sourceKind:
+    | "cors-attacker-obtainable-null-origin"
+    | "cors-reflected-request-origin";
+}
+
+interface NodeExpressSessionResponseData {
+  line: number;
+  symbol: string;
+}
+
+function nodeExpressSecurityMiddlewareBindings(
+  files: readonly SourceFileSnapshot[],
+  file: SourceFileSnapshot,
+  moduleSpecifier: NodeExpressSecurityMiddlewareModule,
+  expectedMajor: number,
+): NodeExpressSecurityMiddlewareBinding[] {
+  const dependency = nodeRuntimeDependency(files, file.path, moduleSpecifier);
+  const major = Number(dependency?.version.split(".")[0]);
+  if (dependency === undefined || major !== expectedMajor) return [];
+  const escapedModule = escapeRegularExpression(moduleSpecifier);
+  const bindings: NodeExpressSecurityMiddlewareBinding[] = [];
+  for (let index = 0; index < file.lines.length; index += 1) {
+    const code = javascriptCodeBeforeComment(file.lines[index] ?? "");
+    const local =
+      new RegExp(
+        `^\\s*import\\s+([A-Za-z_$][\\w$]*)\\s+from\\s+["']${escapedModule}["']`,
+        "u",
+      ).exec(code)?.[1] ??
+      new RegExp(
+        `^\\s*import\\s+([A-Za-z_$][\\w$]*)\\s*=\\s*require\\s*\\(\\s*["']${escapedModule}["']\\s*\\)`,
+        "u",
+      ).exec(code)?.[1] ??
+      new RegExp(
+        `^\\s*(?:const|let|var)\\s+([A-Za-z_$][\\w$]*)\\s*=\\s*require\\s*\\(\\s*["']${escapedModule}["']\\s*\\)\\s*;?\\s*$`,
+        "u",
+      ).exec(code)?.[1];
+    if (local === undefined) continue;
+    bindings.push({
+      dependency,
+      line: index + 1,
+      local,
+      moduleSpecifier,
+    });
+  }
+  return bindings.filter(
+    (binding, index, all) =>
+      all.findIndex(
+        (candidate) =>
+          candidate.local === binding.local && candidate.line === binding.line,
+      ) === index,
+  );
+}
+
+function nodeExpressSecurityMiddlewareInvocation(
+  lines: readonly string[],
+  expression: string,
+  line: number,
+  kind: NodeExpressSecurityMiddlewareInvocation["kind"],
+  bindings: readonly NodeExpressSecurityMiddlewareBinding[],
+): NodeExpressSecurityMiddlewareInvocation | undefined {
+  const original = javascriptCodeLinesWithoutComments(
+    expression.split(/\r?\n/u),
+  ).join("\n");
+  const structural = javascriptStructuralLines(expression.split(/\r?\n/u)).join(
+    "\n",
+  );
+  for (const binding of bindings) {
+    if (
+      binding.line >= line ||
+      javascriptIdentifierReassignedBetween(
+        lines,
+        binding.local,
+        binding.line,
+        line,
+      )
+    ) {
+      continue;
+    }
+    const call = new RegExp(
+      `^\\s*${escapeRegularExpression(binding.local)}\\s*\\(`,
+      "u",
+    ).exec(structural);
+    if (call === null) continue;
+    const open = structural.indexOf("(", call.index);
+    const close = matchingCallParenthesis(structural, open);
+    if (open < 0 || close < 0 || structural.slice(close + 1).trim() !== "") {
+      continue;
+    }
+    const arguments_ = splitJavascriptArguments(
+      original.slice(open + 1, close),
+    );
+    if (arguments_.length !== 1 || arguments_[0]?.trim() === "") continue;
+    return { argument: arguments_[0]!, binding, kind, line };
+  }
+  return undefined;
+}
+
+function nodeExpressMiddlewarePathMatches(
+  middlewarePath: string,
+  routePath: string,
+): boolean {
+  if (middlewarePath === "/") return true;
+  const normalized = middlewarePath.endsWith("/")
+    ? middlewarePath.slice(0, -1)
+    : middlewarePath;
+  return routePath === normalized || routePath.startsWith(`${normalized}/`);
+}
+
+function nodeExpressGlobalMiddlewareInvocation(
+  file: SourceFileSnapshot,
+  structural: string,
+  instance: NodeExpressInstanceBinding,
+  routePath: string,
+  routeLine: number,
+  bindings: readonly NodeExpressSecurityMiddlewareBinding[],
+): NodeExpressSecurityMiddlewareInvocation | undefined {
+  const useMember = new RegExp(
+    `\\b${escapeRegularExpression(instance.local)}\\s*\\.\\s*use\\s*\\(`,
+    "u",
+  );
+  for (const use of javascriptCallsInText(
+    file.text,
+    structural,
+    1,
+    useMember,
+  )) {
+    if (use.line <= instance.line || use.line >= routeLine) continue;
+    const arguments_ = [...use.arguments];
+    if (arguments_.at(-1)?.trim() === "") arguments_.pop();
+    let expression: string | undefined;
+    if (arguments_.length === 1) {
+      expression = arguments_[0];
+    } else if (arguments_.length === 2) {
+      const prefix = nodeStaticString(arguments_[0]);
+      if (
+        prefix !== undefined &&
+        nodeExpressMiddlewarePathMatches(prefix, routePath)
+      ) {
+        expression = arguments_[1];
+      }
+    }
+    if (expression === undefined) continue;
+    const invocation = nodeExpressSecurityMiddlewareInvocation(
+      file.lines,
+      expression,
+      use.line,
+      "global",
+      bindings,
+    );
+    if (invocation !== undefined) return invocation;
+  }
+  return undefined;
+}
+
+function nodeExpressRouteMiddlewareInvocation(
+  lines: readonly string[],
+  routeArguments: readonly string[],
+  handlerIndex: number,
+  routeLine: number,
+  bindings: readonly NodeExpressSecurityMiddlewareBinding[],
+): NodeExpressSecurityMiddlewareInvocation | undefined {
+  for (let index = 1; index < handlerIndex; index += 1) {
+    const invocation = nodeExpressSecurityMiddlewareInvocation(
+      lines,
+      routeArguments[index] ?? "",
+      routeLine,
+      "route",
+      bindings,
+    );
+    if (invocation !== undefined) return invocation;
+  }
+  return undefined;
+}
+
+function nodeExpressIdentifierPropertyMutatedBetween(
+  lines: readonly string[],
+  identifier: string,
+  afterLine: number,
+  beforeLine: number,
+): boolean {
+  const escaped = escapeRegularExpression(identifier);
+  const mutation = new RegExp(
+    `\\b${escaped}\\s*(?:\\.\\s*[A-Za-z_$][\\w$]*|\\[\\s*["'][^"']+["']\\s*\\])\\s*(?:[+\\-*/%&|^?]?=(?!=|>)|\\+\\+|--)`,
+    "u",
+  );
+  return lines
+    .slice(afterLine, Math.max(afterLine, beforeLine - 1))
+    .some((line) => mutation.test(javascriptStructuralCode(line)));
+}
+
+function nodeExpressCorsCallbackReflectsOrigin(
+  lines: readonly string[],
+  expression: string,
+  line: number,
+  evaluationLine: number,
+): boolean {
+  const identifier = /^[A-Za-z_$][\w$]*$/u.test(expression.trim())
+    ? expression.trim()
+    : undefined;
+  const resolved = resolveJavascriptExpression(lines, expression, line);
+  if (resolved === undefined) return false;
+  if (
+    identifier !== undefined &&
+    (resolved.value.trim() === identifier ||
+      javascriptIdentifierReassignedBetween(
+        lines,
+        identifier,
+        resolved.line,
+        evaluationLine,
+      ))
+  ) {
+    return false;
+  }
+  const structural = javascriptStructuralLines(resolved.value.split(/\r?\n/u))
+    .join("\n")
+    .trim();
+  const arrow =
+    /^\(\s*([A-Za-z_$][\w$]*)\s*,\s*([A-Za-z_$][\w$]*)\s*\)\s*=>\s*([\s\S]+)$/u.exec(
+      structural,
+    );
+  const functionExpression =
+    /^function(?:\s+[A-Za-z_$][\w$]*)?\s*\(\s*([A-Za-z_$][\w$]*)\s*,\s*([A-Za-z_$][\w$]*)\s*\)\s*\{([\s\S]*)\}\s*$/u.exec(
+      structural,
+    );
+  const match = arrow ?? functionExpression;
+  const origin = match?.[1];
+  const callback = match?.[2];
+  let body = match?.[3]?.trim();
+  if (origin === undefined || callback === undefined || body === undefined) {
+    return false;
+  }
+  if (body.startsWith("{") && body.endsWith("}")) {
+    body = body.slice(1, -1).trim();
+  }
+  const escapedCallback = escapeRegularExpression(callback);
+  const escapedOrigin = escapeRegularExpression(origin);
+  return new RegExp(
+    `^(?:return\\s+)?${escapedCallback}\\s*\\(\\s*null\\s*,\\s*(?:true|${escapedOrigin})\\s*\\)\\s*;?$`,
+    "u",
+  ).test(body);
+}
+
+function nodeExpressCredentialedCorsPolicy(
+  lines: readonly string[],
+  optionsExpression: string,
+  callLine: number,
+  evaluationLine: number,
+): NodeExpressCredentialedCorsPolicy | undefined {
+  const optionsIdentifier = /^[A-Za-z_$][\w$]*$/u.test(optionsExpression.trim())
+    ? optionsExpression.trim()
+    : undefined;
+  const options = resolveJavascriptExpression(
+    lines,
+    optionsExpression,
+    callLine,
+  );
+  if (
+    options === undefined ||
+    javascriptCompositePrefix(options.value, "{", "}") === undefined ||
+    javascriptStructuralLines(options.value.split(/\r?\n/u)).some((line) =>
+      /\.\.\./u.test(line),
+    ) ||
+    (optionsIdentifier !== undefined &&
+      (javascriptIdentifierReassignedBetween(
+        lines,
+        optionsIdentifier,
+        options.line,
+        evaluationLine,
+      ) ||
+        nodeExpressIdentifierPropertyMutatedBetween(
+          lines,
+          optionsIdentifier,
+          options.line,
+          evaluationLine,
+        )))
+  ) {
+    return undefined;
+  }
+  const entries = javascriptObjectEntries(options);
+  const credentials = entries
+    .filter((entry) => entry.key === "credentials")
+    .at(-1);
+  if (credentials?.value.trim() !== "true") return undefined;
+  const origin = entries.filter((entry) => entry.key === "origin").at(-1);
+  if (origin === undefined) return undefined;
+  if (origin.value.trim() === "true") {
+    return {
+      credentialsLine: credentials.line,
+      originControlKind: "cors-origin-reflection-enabled",
+      originLine: origin.line,
+      sourceKind: "cors-reflected-request-origin",
+    };
+  }
+  if (nodeStaticString(origin.value)?.toLocaleLowerCase("en-US") === "null") {
+    return {
+      credentialsLine: credentials.line,
+      originControlKind: "cors-null-origin-enabled",
+      originLine: origin.line,
+      sourceKind: "cors-attacker-obtainable-null-origin",
+    };
+  }
+  if (
+    nodeExpressCorsCallbackReflectsOrigin(
+      lines,
+      origin.value,
+      origin.line,
+      evaluationLine,
+    )
+  ) {
+    return {
+      credentialsLine: credentials.line,
+      originControlKind: "cors-origin-callback-reflection-enabled",
+      originLine: origin.line,
+      sourceKind: "cors-reflected-request-origin",
+    };
+  }
+  return undefined;
+}
+
+function nodeExpressSessionResponseData(
+  lines: readonly string[],
+  expression: string,
+  sinkLine: number,
+  handler: NodeExpressHandlerScope,
+): NodeExpressSessionResponseData | undefined {
+  const identifier = /^[A-Za-z_$][\w$]*$/u.test(expression.trim())
+    ? expression.trim()
+    : undefined;
+  const resolved = resolveJavascriptExpression(lines, expression, sinkLine);
+  if (resolved === undefined) return undefined;
+  if (
+    identifier !== undefined &&
+    (resolved.value.trim() === identifier ||
+      resolved.line < handler.startLine ||
+      resolved.line > handler.endLine ||
+      javascriptIdentifierReassignedBetween(
+        lines,
+        identifier,
+        resolved.line,
+        sinkLine,
+      ))
+  ) {
+    return undefined;
+  }
+  const fields =
+    "account|apiKey|api_key|email|permissions|profile|refreshToken|refresh_token|role|roles|secret|token|user";
+  const match = new RegExp(
+    `\\b${escapeRegularExpression(handler.request)}\\s*\\.\\s*session(?:\\s*\\.\\s*(${fields})\\b|\\s*\\[\\s*["'](${fields})["']\\s*\\])`,
+    "u",
+  ).exec(resolved.value);
+  const field = match?.[1] ?? match?.[2];
+  if (match?.index === undefined || field === undefined) return undefined;
+  return {
+    line:
+      resolved.line +
+      (resolved.value.slice(0, match.index).match(/\n/gu)?.length ?? 0),
+    symbol: `${handler.request}.session.${field}`,
+  };
+}
+
+function nodeExpressCredentialedCorsRecords(
+  files: readonly SourceFileSnapshot[],
+): ResidualRiskRecord[] {
+  const records: ResidualRiskRecord[] = [];
+  const emitted = new Set<string>();
+  for (const file of files) {
+    if (
+      !JAVASCRIPT_EXTENSIONS.has(file.extension) ||
+      javascriptTestOrExamplePath(file.path)
+    ) {
+      continue;
+    }
+    const expressDependency = nodeRuntimeDependency(
+      files,
+      file.path,
+      "express",
+    );
+    const expressMajor = Number(expressDependency?.version.split(".")[0]);
+    if (
+      expressDependency === undefined ||
+      (expressMajor !== 4 && expressMajor !== 5)
+    ) {
+      continue;
+    }
+    const corsBindings = nodeExpressSecurityMiddlewareBindings(
+      files,
+      file,
+      "cors",
+      2,
+    );
+    const sessionBindings = nodeExpressSecurityMiddlewareBindings(
+      files,
+      file,
+      "express-session",
+      1,
+    );
+    if (corsBindings.length === 0 || sessionBindings.length === 0) continue;
+    const factories = nodeExpressFactoryBindings(file.lines);
+    const structural = javascriptStructuralLines(file.lines).join("\n");
+    for (const instance of nodeExpressInstanceBindings(file.lines)) {
+      const factory = factories.find(
+        (candidate) => candidate.line === instance.factoryLine,
+      );
+      const escapedInstance = escapeRegularExpression(instance.local);
+      for (const method of [
+        "all",
+        "delete",
+        "get",
+        "head",
+        "options",
+        "patch",
+        "post",
+        "put",
+      ]) {
+        const routeMember = new RegExp(
+          `\\b${escapedInstance}\\s*\\.\\s*${method}\\s*\\(`,
+          "u",
+        );
+        for (const route of javascriptCallsInText(
+          file.text,
+          structural,
+          1,
+          routeMember,
+        )) {
+          const routePath = nodeStaticString(route.arguments[0]);
+          if (route.line <= instance.line || routePath === undefined) continue;
+          const routeEndLine =
+            1 + (structural.slice(0, route.close).match(/\n/gu)?.length ?? 0);
+          for (
+            let handlerIndex = 1;
+            handlerIndex < route.arguments.length;
+            handlerIndex += 1
+          ) {
+            const handlerArgument = route.arguments[handlerIndex] ?? "";
+            const inline = nodeExpressHandlerParameters(handlerArgument);
+            const named = /^[A-Za-z_$][\w$]*$/u.test(handlerArgument.trim())
+              ? nodeExpressNamedHandler(
+                  file.lines,
+                  handlerArgument.trim(),
+                  route.line,
+                )
+              : undefined;
+            const handler: NodeExpressHandlerScope | undefined =
+              inline === undefined
+                ? named
+                : {
+                    ...inline,
+                    endLine: routeEndLine,
+                    startLine: route.line,
+                  };
+            if (handler === undefined) continue;
+            if (
+              handler.symbol !== undefined &&
+              javascriptIdentifierReassignedBetween(
+                file.lines,
+                handler.symbol,
+                handler.startLine,
+                route.line,
+              )
+            ) {
+              continue;
+            }
+            const corsInvocation =
+              nodeExpressRouteMiddlewareInvocation(
+                file.lines,
+                route.arguments,
+                handlerIndex,
+                route.line,
+                corsBindings,
+              ) ??
+              nodeExpressGlobalMiddlewareInvocation(
+                file,
+                structural,
+                instance,
+                routePath,
+                route.line,
+                corsBindings,
+              );
+            if (corsInvocation === undefined) continue;
+            const corsPolicy = nodeExpressCredentialedCorsPolicy(
+              file.lines,
+              corsInvocation.argument,
+              corsInvocation.line,
+              route.line,
+            );
+            if (corsPolicy === undefined) continue;
+            const sessionInvocation =
+              nodeExpressRouteMiddlewareInvocation(
+                file.lines,
+                route.arguments,
+                handlerIndex,
+                route.line,
+                sessionBindings,
+              ) ??
+              nodeExpressGlobalMiddlewareInvocation(
+                file,
+                structural,
+                instance,
+                routePath,
+                route.line,
+                sessionBindings,
+              );
+            if (sessionInvocation === undefined) continue;
+            const handlerLines = file.lines.slice(
+              handler.startLine - 1,
+              handler.endLine,
+            );
+            const handlerText = handlerLines.join("\n");
+            const handlerStructural =
+              javascriptStructuralLines(handlerLines).join("\n");
+            const escapedResponse = escapeRegularExpression(handler.response);
+            for (const responseCall of javascriptCallsInText(
+              handlerText,
+              handlerStructural,
+              handler.startLine,
+              new RegExp(
+                `\\b${escapedResponse}\\s*\\.\\s*(?:json|send)\\s*\\(`,
+                "u",
+              ),
+            )) {
+              const responseArguments = [...responseCall.arguments];
+              if (responseArguments.at(-1)?.trim() === "") {
+                responseArguments.pop();
+              }
+              if (responseArguments.length !== 1) continue;
+              const sessionData = nodeExpressSessionResponseData(
+                file.lines,
+                responseArguments[0]!,
+                responseCall.line,
+                handler,
+              );
+              if (sessionData === undefined) continue;
+              const prefix = handlerStructural.slice(0, responseCall.start);
+              const factoryLocal = factory?.local;
+              if (
+                nodeExpressBindingAssignedInText(prefix, handler.response) ||
+                new RegExp(
+                  `\\b${escapedResponse}\\s*\\.\\s*(?:json|send)\\s*=`,
+                  "u",
+                ).test(prefix) ||
+                new RegExp(
+                  `\\b${escapeRegularExpression(handler.request)}\\s*\\.\\s*session\\s*=`,
+                  "u",
+                ).test(prefix) ||
+                javascriptIdentifierReassignedBetween(
+                  file.lines,
+                  instance.local,
+                  instance.line,
+                  route.line,
+                ) ||
+                (factoryLocal !== undefined &&
+                  javascriptIdentifierReassignedBetween(
+                    file.lines,
+                    factoryLocal,
+                    factory!.line,
+                    route.line,
+                  )) ||
+                file.lines
+                  .slice(instance.line, route.line - 1)
+                  .some((line) =>
+                    new RegExp(
+                      `\\b${escapedInstance}\\s*\\.\\s*${method}\\s*=`,
+                      "u",
+                    ).test(javascriptCodeBeforeComment(line)),
+                  )
+              ) {
+                continue;
+              }
+              const key = `${file.path}\0${route.line}\0${corsPolicy.originLine}\0${responseCall.line}`;
+              if (
+                emitted.has(key) ||
+                records.length >= MAX_FRAMEWORK_CROSS_FILE_RECORDS
+              ) {
+                continue;
+              }
+              emitted.add(key);
+              const startLine = Math.max(
+                1,
+                responseCall.line - CONTEXT_LINES_BEFORE,
+              );
+              const endLine = Math.min(
+                file.lines.length,
+                responseCall.line + CONTEXT_LINES_AFTER,
+              );
+              records.push({
+                path: file.path,
+                line: responseCall.line,
+                categories: [
+                  "framework-dataflow:node-express-credentialed-cors-session-exposure",
+                  `modeled-source:${corsPolicy.sourceKind}`,
+                  "modeled-sink:express-credentialed-cors-session-response",
+                ],
+                priority: 117,
+                startLine,
+                endLine,
+                excerpt: sourceExcerpt(file.lines, startLine, endLine),
+                sourceExcerpt: sourceExcerpt(
+                  file.lines,
+                  Math.max(1, corsPolicy.originLine - 1),
+                  Math.min(file.lines.length, corsPolicy.originLine + 1),
+                ),
+                frameworkModel: {
+                  schemaVersion: "1.2",
+                  id: "node-express-credentialed-cors-session-exposure",
+                  language: "javascript-typescript",
+                  scope: "same-file",
+                  source: {
+                    kind: corsPolicy.sourceKind,
+                    path: file.path,
+                    line: corsPolicy.originLine,
+                  },
+                  sink: {
+                    kind: "express-credentialed-cors-session-response",
+                    path: file.path,
+                    line: responseCall.line,
+                    cweIds: ["CWE-942", "CWE-346", "CWE-639"],
+                  },
+                  propagators: [
+                    {
+                      kind: `express-${instance.kind}-factory-binding`,
+                      path: file.path,
+                      line: instance.factoryLine,
+                      symbol: instance.local,
+                    },
+                    {
+                      kind: "express-literal-session-data-route",
+                      path: file.path,
+                      line: route.line,
+                      symbol: `${method.toUpperCase()} ${routePath}`,
+                    },
+                    {
+                      kind: "express-handler-request-response-binding",
+                      path: file.path,
+                      line: handler.startLine,
+                      symbol: `${handler.request},${handler.response}`,
+                    },
+                    {
+                      kind: "cors-middleware-activation",
+                      path: file.path,
+                      line: corsInvocation.line,
+                      symbol: `${instance.local}.${corsInvocation.kind === "global" ? "use" : method}`,
+                    },
+                    {
+                      kind: "cors-runtime-dependency",
+                      path: corsInvocation.binding.dependency.manifestPath,
+                      line: corsInvocation.binding.dependency.line,
+                      symbol: `cors@${corsInvocation.binding.dependency.version}:${corsInvocation.binding.dependency.proof}`,
+                    },
+                    {
+                      kind: "express-session-middleware-activation",
+                      path: file.path,
+                      line: sessionInvocation.line,
+                      symbol: `${instance.local}.${sessionInvocation.kind === "global" ? "use" : method}`,
+                    },
+                    {
+                      kind: "express-session-runtime-dependency",
+                      path: sessionInvocation.binding.dependency.manifestPath,
+                      line: sessionInvocation.binding.dependency.line,
+                      symbol: `express-session@${sessionInvocation.binding.dependency.version}:${sessionInvocation.binding.dependency.proof}`,
+                    },
+                    {
+                      kind: "express-runtime-dependency",
+                      path: expressDependency.manifestPath,
+                      line: expressDependency.line,
+                      symbol: `express@${expressDependency.version}:${expressDependency.proof}`,
+                    },
+                    {
+                      kind: "express-session-response-data",
+                      path: file.path,
+                      line: sessionData.line,
+                      symbol: sessionData.symbol,
+                    },
+                  ],
+                  candidateControls: [
+                    {
+                      kind: "cors-credentials-enabled",
+                      path: file.path,
+                      line: corsPolicy.credentialsLine,
+                    },
+                    {
+                      kind: corsPolicy.originControlKind,
+                      path: file.path,
+                      line: corsPolicy.originLine,
+                    },
+                    {
+                      kind: "express-session-middleware-active",
+                      path: file.path,
+                      line: sessionInvocation.line,
+                    },
+                  ],
+                },
+              });
               if (records.length >= MAX_FRAMEWORK_CROSS_FILE_RECORDS) {
                 return records;
               }
