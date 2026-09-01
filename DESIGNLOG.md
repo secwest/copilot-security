@@ -2,6 +2,153 @@
 
 This log records consequential implementation decisions, their evidence, and the tradeoffs that future scanner work must preserve.
 
+## 2026-09-01 — Authorize final evidence by immutable scope and await scanner shutdown
+
+**Findings came from the scanner, not an assumed threat.** A deep
+stored-credential self-scan fixed its target at tracked checkpoint
+`18a4a22bc65c9bfb01d20ad2ef4d6c04fd849723`, independently compiled a
+565-file immutable source set, and closed every coverage surface. It retained
+two findings. First, the finalizer bounded a model-authored path beneath the
+repository root but did not require membership in the exact path-scoped
+inventory. A model could therefore make finalization read and seal an excluded
+sibling file. Second, both GUI close handlers synchronously disposed the view
+model; disposal canceled the token but could let application exit race the
+runner's asynchronous process-tree kill and output drain. These were a real
+authorization defect and lifecycle defect, not results from the intentionally
+vulnerable benchmark corpus.
+
+**The inventory is an authorization set.** Read and digest-check
+`artifacts/02_discovery/in_scope_files.txt` once at the start of finalization,
+preserve the ordered list for coverage reconciliation, and create an exact set
+for evidence authorization. Every normalized finding location and every code
+evidence path must belong to that set before source recovery or grounding can
+resolve or read it. Apply the check to unsealed drafts and sealed input; a seal
+proves artifact integrity, not that every referenced repository object is in
+the requested scope. Repository containment remains a second independent
+boundary. Do not silently prune an out-of-scope citation: fail the scan because
+accepting the remaining object could change the model's security claim.
+
+**Recovery cannot widen authority.** Source-evidence synthesis and excerpt
+grounding receive the same authorized set and return no data for a path outside
+it. The explicit pre-grounding rejection provides a stable, non-secret error
+that names only the relative path and finding ordinal. Existing schema,
+canonicalization, line-range, excerpt, endpoint-role, target-snapshot, and
+coverage checks remain in force. This makes path authorization compositional:
+normalization may repair representation, but it cannot grant access.
+
+**Window closure is an asynchronous protocol.** Make the shared view model
+`IAsyncDisposable`, inject the process runner behind a narrow interface, and
+associate every scan or benchmark run with both a cancellation source and a
+run-completion signal. Disposal becomes idempotent for concurrent callers:
+the first call prevents new operations, cancels the active one, awaits the
+runner's completion path, then persists settings; later calls share the same
+task. WPF and Avalonia cancel the first close event, await disposal, and issue
+one guarded second close. The process runner still owns bounded tree
+termination and stream draining; the window merely waits for that contract.
+
+**Regression and release evidence.** Both scope regressions began red because
+the finalizer accepted excluded `src/excluded.py` paths. They now reject both a
+finding location and a code-evidence citation before repository grounding;
+the complete recovery suite passes 89/89 with 601 assertions. A controlled
+runner deliberately observes cancellation and withholds termination. Two
+concurrent disposal calls remain incomplete until the runner releases, then
+both finish; this test passes on Windows and WSL. The complete SDK lane records
+2,297 passes, 31 intentional skips, 17,822 assertions, and only two expected
+managed-filesystem denials across 2,330 tests and 227 files in 1,063.28
+seconds. Their native rerun passes 48/48 with 244 assertions. Windows passes
+7/7 core and 4/4 shared tests; WSL passes 4/4 shared and 2/2 headless tests;
+both release GUIs build with zero warnings or errors. Production audit is
+clean. Two independent 299-entry, 2,574,370-byte npm archives are identical at
+SHA-256 `6237cc37c22fa8c5be01e33fb901c85b3ea7021f04211f5015109fd66c719c5f`,
+and strict installation validates 67 packages, the public API, CLI, and all 79
+plugin files. The scanner-effectiveness goal remains active.
+
+**Corrective scanner closure.** Scan the seven changed files from an immutable
+archive of exact remediation checkpoint
+`21f95a603cd668919cb5778e141ae89ddb1c06c8`, not the documentation-bearing
+working tree. A stored-credential `gpt-5.6-sol` high-reasoning deep scan
+completes in 14m06s with zero findings, `complete` coverage across all seven
+surfaces, and an empty deferred list. All 9 manifest artifact hashes match
+independent SHA-256 calculations. The scan accounts for 3,676,380 input tokens
+(2,924,929 cached), 54,542 output tokens, and an estimated $7.420527. It has no
+retry, classifier refusal, authentication, quota, credit-limit, rate-limit, or
+transport event. Its static-review limitation is explicit; the controlled
+Windows and WSL process-runner regressions provide the separate dynamic
+shutdown evidence.
+
+**Hosted closure.** Every workflow family passes on remediation checkpoint
+`21f95a603cd668919cb5778e141ae89ddb1c06c8`. Node run
+[`33521413272`](https://github.com/secwest/copilot-security/actions/runs/33521413272)
+passes 92/92 jobs; [container `33521413064`](https://github.com/secwest/copilot-security/actions/runs/33521413064),
+[Windows GUI `33521413049`](https://github.com/secwest/copilot-security/actions/runs/33521413049),
+[Linux GUI `33521413123`](https://github.com/secwest/copilot-security/actions/runs/33521413123),
+[.NET `33521413263`](https://github.com/secwest/copilot-security/actions/runs/33521413263),
+[Go `33521413341`](https://github.com/secwest/copilot-security/actions/runs/33521413341),
+[Java `33521413076`](https://github.com/secwest/copilot-security/actions/runs/33521413076),
+[Kotlin `33521413145`](https://github.com/secwest/copilot-security/actions/runs/33521413145),
+[PHP `33521413019`](https://github.com/secwest/copilot-security/actions/runs/33521413019),
+[Ruby `33521413276`](https://github.com/secwest/copilot-security/actions/runs/33521413276),
+and [Rust `33521413258`](https://github.com/secwest/copilot-security/actions/runs/33521413258)
+pass. GitHub reports the repository public on default branch `main`.
+
+## 2026-09-01 — Model credentialed Express CORS as a session-data attack path
+
+**Measured gap and standards boundary.** A production-shaped Express route
+used the official `cors` middleware with credentials enabled and an Origin
+callback that returned the request's arbitrary Origin. After
+`express-session`, the route returned session-derived identity data. The
+unchanged scanner emitted no specialized result, and the source-matched exact
+origin allowlist remained silent. CodeQL's
+[`js/cors-misconfiguration-for-credentials`](https://codeql.github.com/codeql-query-help/javascript/js-cors-misconfiguration-for-credentials/)
+describes the credentialed arbitrary-origin boundary. The official
+[`expressjs/cors` README](https://github.com/expressjs/cors/blob/master/README.md)
+documents static and callback-based configuration, and
+[`MDN's CORS guide`](https://developer.mozilla.org/en-US/docs/Web/HTTP/Guides/CORS)
+explains why credentialed responses require an explicit allowed origin rather
+than wildcard authorization.
+
+**Require the whole browser-reachable chain.** The deterministic model does
+not report package presence or an isolated permissive callback. It proves
+official Express and `cors` bindings, a live application or Router, literal
+route registration, exact middleware activation before the handler, final
+origin and credentials values, a registered handler using the matching
+request/response identities, `express-session` activation, and session-derived
+data reaching the response. Global and route-local forms are modeled; order,
+mount path, mutations, rebindings, and package scope remain significant.
+
+**Honor browser controls and uncertainty.** Literal wildcard plus credentials
+is normally blocked by browsers and is not equivalent to reflecting an Origin.
+An exact stable allowlist, exact-origin comparison, or callback that rejects
+unmatched origins suppresses the candidate. Null-origin acceptance remains
+reviewable because sandboxed and opaque origins can legitimately serialize as
+`null`. Dynamic values, spreads, unresolved callbacks, ambiguous application
+identity, unsupported dependency ranges, local lookalikes, test paths, and
+unregistered handlers fail closed instead of being promoted by lexical
+similarity.
+
+**Keep impact evidence-specific.** The row uses CWE-942 for overly permissive
+cross-domain policy, CWE-346 for inadequate origin validation, and CWE-639 for
+the resulting session-bound data authorization failure. Validation must prove
+that a hostile browser Origin receives a credentialed response containing
+victim-session data. The static model does not claim credential theft, a state
+change, account takeover, or server compromise unless separate evidence proves
+those steps. Reviewer guidance preserves cookie SameSite behavior, preflight,
+route reachability, response readability, origin normalization, cache
+variation, and proxy/header rewriting as explicit runtime questions.
+
+**Benchmark evidence.** The pair pins `cors` 2.8.6, Express 5.2.1, and
+`express-session` 1.19.0 and differs at the arbitrary-Origin callback versus a
+literal allowlist. Offline witnesses invoke real middleware with inert request
+and response objects and start no listener. Focused model and canonical tests
+pass 36/36 with 3,079 assertions; adjacent framework and residual-risk lanes
+pass 166 tests with two intentional skips and 1,422 assertions. Two exact-
+checkpoint inventories are identical at 256 rows, 645,470 bytes, and SHA-256
+`82b9c338142008f253e3275862d2764cb7168b84a9c0d97f0b78c9cc1c871306`.
+Exactly one new canonical row retains the vulnerable fixture, all three CWEs,
+nine propagators, and exact dependency versions; the allowlist twin is absent.
+The canonical corpus advances to 213 pairs, 426 cases, and 1,278 repeated
+positions. The scanner-effectiveness goal remains active.
+
 ## 2026-09-01 — Prove cleartext-capable signed Express cookies without conflating adjacent controls
 
 **Measured gap and maintained comparator.** A production-shaped Express 5

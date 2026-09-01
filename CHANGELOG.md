@@ -6,6 +6,86 @@ All notable scanner, application, benchmark, and operational changes are recorde
 
 ### Scanner effectiveness
 
+- Closed a measured Express credentialed-CORS false negative. A route that
+  reflects an arbitrary request Origin, enables credentials, activates
+  `express-session`, and returns session-derived data previously produced no
+  specialized row; its exact-origin allowlist twin also remained silent.
+- Added `node-express-credentialed-cors-session-exposure` with CWE-942,
+  CWE-346, and CWE-639 evidence. The model proves official Express and `cors`
+  bindings, global or route-local middleware activation and order, final CORS
+  option values, credentialed browser eligibility, a registered handler, and
+  concrete session-derived response data. Exact origin allowlists and
+  browser-blocked wildcard policies suppress the row; dynamic, ambiguous,
+  rebound, development-only, test, and lookalike cases fail closed.
+- Added pinned `cors` 2.8.6, Express 5.2.1, and `express-session` 1.19.0
+  vulnerable/control fixtures plus offline real-middleware witnesses. Focused
+  CORS and canonical lanes pass 36/36 tests with 3,079 assertions; adjacent
+  framework and residual-risk lanes pass 166 tests with two intentional
+  platform skips and 1,422 assertions. The canonical corpus now contains 213
+  exploit/control pairs, 426 cases, and 1,278 repeated scan positions.
+- Two independent inventories of exact CORS checkpoint
+  `18a4a22bc65c9bfb01d20ad2ef4d6c04fd849723` are identical at 256 rows and
+  645,470 bytes with SHA-256
+  `82b9c338142008f253e3275862d2764cb7168b84a9c0d97f0b78c9cc1c871306`.
+  Exactly one new row selects the intentional reflected-origin fixture at
+  `benchmarks/fixtures/node-express-credentialed-cors-reflection/src/server.js`
+  lines 8 and 21 with all three CWEs and nine propagators; the allowlist twin
+  is absent.
+- A stored-credential `gpt-5.6-sol` high-reasoning deep self-scan of that
+  immutable 565-file checkpoint completed with all coverage surfaces closed.
+  It used 103,439,863 input tokens (96,256,438 cached), 759,344 output tokens,
+  and an estimated $113.78474275 in 80m40s. It encountered no classifier,
+  authentication, quota, credit-limit, or transport failure, independently
+  confirming that the account allowance was not exhausted.
+- The self-scan found two genuine scanner defects rather than benchmark
+  fixture noise. A medium CWE-863 finding showed that finalization accepted a
+  model-authored finding or evidence path anywhere beneath the repository,
+  even when the path was absent from a narrower immutable scan inventory. A
+  low CWE-404 finding showed that GUI window disposal canceled an active scan
+  but did not await process-tree termination before application exit.
+- Finalization now loads and verifies the immutable inventory once, rejects
+  every finding and code-evidence path outside that exact set before any
+  repository read, and applies the same authorization to unsealed and sealed
+  inputs. Two measured red-to-green regressions cover excluded finding and
+  evidence paths; the complete recovery suite passes 89/89 tests with 601
+  assertions.
+- The shared desktop view model now owns an injectable scanner runner,
+  implements idempotent asynchronous disposal, cancels an active operation,
+  and waits for its completion signal before saving settings and returning.
+  Windows WPF and Linux Avalonia both defer their first close until disposal
+  completes. A controlled runner regression proves that two concurrent close
+  callers remain pending until scanner termination is confirmed.
+- Post-remediation acceptance exercises 2,330 SDK tests across 227 files in
+  1,063.28 seconds: 2,297 pass, 31 intentional platform or real-service skips
+  remain, and only the two established managed-filesystem boundaries are
+  denied. Both boundary files pass 48/48 with 244 assertions under native
+  Windows permissions. Formatting, generated-model drift, TypeScript, the SDK
+  build, Python compilation, and the live production advisory audit are green.
+- Windows passes 7/7 core tests and 4/4 shared desktop tests and builds the
+  release GUI with zero warnings or errors. Ubuntu/WSL passes the same 4/4
+  shared tests, 2/2 headless Linux GUI tests, and a zero-warning release build.
+  Both applications retain separate Copilot Security executable, settings,
+  history, benchmark, and `copilot-security-home` namespaces.
+- Two post-remediation npm archives are byte-identical at 299 entries and
+  2,574,370 bytes with SHA-256
+  `6237cc37c22fa8c5be01e33fb901c85b3ea7021f04211f5015109fd66c719c5f`.
+  Strict isolated installation validates 67 production packages, the public
+  import, executable CLI, and all 79 bundled plugin files. Exact remediation
+  checkpoint `21f95a603cd668919cb5778e141ae89ddb1c06c8` is pushed to `main`.
+- A corrective stored-credential `gpt-5.6-sol` high-reasoning deep scan of the
+  seven changed files at immutable checkpoint `21f95a603cd668919cb5778e141ae89ddb1c06c8`
+  completes in 14m06s with zero findings, complete seven-surface coverage, and
+  no deferred work. All 9 sealed artifact hashes verify independently. The run
+  uses 3,676,380 input tokens (2,924,929 cached), 54,542 output tokens, and an
+  estimated $7.420527, with no retry, refusal, authentication, quota,
+  credit-limit, rate-limit, or transport error.
+- Remediation checkpoint `21f95a603cd668919cb5778e141ae89ddb1c06c8`
+  passes every hosted workflow family. Node run `33521413272` passes 92/92
+  jobs; container `33521413064`, Windows GUI `33521413049`, Linux GUI
+  `33521413123`, .NET `33521413263`, Go `33521413341`, Java `33521413076`,
+  Kotlin `33521413145`, PHP `33521413019`, Ruby `33521413276`, and Rust
+  `33521413258` pass. GitHub reports the repository public on default branch
+  `main`.
 - Closed a measured Express transport-confidentiality false negative. The
   unchanged scanner emitted no specialized row when a literal session route
   placed an exact `jsonwebtoken.sign(...)` result in a credential-shaped
