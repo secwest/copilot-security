@@ -6,6 +6,17 @@ All notable scanner, application, benchmark, and operational changes are recorde
 
 ### Scanner effectiveness
 
+- Hardened post-draft Copilot recovery after a real self-scan produced all
+  three complete artifacts and then received HTTP 400 `resource ... not
+found` during provider resource teardown. A narrow 400/404 requested-resource
+  classifier now hands complete drafts to deterministic host validation rather
+  than discarding a valid scan result. It does not retry or accept missing
+  drafts, authentication/authorization failures, classifier refusals,
+  cancellations, sandbox violations, or scanner contract errors.
+- Added a measured red-to-green transport regression and reran the Copilot
+  port plus API event-finalization suites: 66 tests pass with 272 assertions at
+  the native Windows filesystem boundary. This recovery path remains
+  host-audited; valid draft filenames alone never establish completion.
 - Closed a measured Express sensitive-cookie false negative. The unchanged
   scanner emitted no structured row when an Express session route placed an
   exact `jsonwebtoken.sign(...)` result in a credential-shaped response
@@ -38,6 +49,30 @@ All notable scanner, application, benchmark, and operational changes are recorde
   countercontrol semantics, finding closure, and reviewer instructions.
   Fifty-five adjacent Express and benchmark-integrity tests also pass with
   3,004 assertions.
+- The complete Windows regression lane records 2,279 passes, 31 intentional
+  platform/real-service skips, 17,579 assertions, and the two established
+  managed-filesystem failures across 2,312 tests and 225 files in 1,056.00
+  seconds. The exact temporary-Git and private Windows credential-home files
+  pass 48/48 with 242 assertions at their required native boundary.
+- Two 299-entry npm archives are byte-identical at 2,560,376 bytes with
+  SHA-256
+  `60090255375b1354f4ae919a5926bb497a8d92a5440d2a2228d62884d4d738a2`.
+  Both strict isolated installs validate 67 production packages, the public
+  import, executable CLI, and all 79 bundled plugin files. The live production
+  advisory audit reports no known vulnerabilities.
+- Two compiled inventories of a tracked-only exact-checkpoint archive are
+  byte-identical at 256 rows and 642,719 bytes with SHA-256
+  `be76b402d93384df0fca29667136e2f16f4581abd4adf7a2e3f8b66183e55a16`.
+  Exactly one new row identifies the intentional readable-cookie fixture at
+  signing line 14 and Express cookie line 19; the HttpOnly control is absent.
+- Windows builds with zero warnings/errors, passes 7/7 execution-core and 3/3
+  shared tests, and publishes a 346,796-byte executable with SHA-256
+  `8f2947eeeb5cd2e2aa70426ce41511191983b784985ad2abfe30de4d97ac6a65`
+  that remains alive through controlled hidden startup. Ubuntu/WSL restores
+  the locked graph, builds with zero warnings/errors, passes those suites plus
+  2/2 headless tests, and passes non-graphical and X11/Xvfb startup. Its
+  72,568-byte executable has SHA-256
+  `7e29d642169a6c218c249216c6c10648307aea88faf636b69ac25741104b4adf`.
 - Closed a measured Fastify authentication-rate-limit false negative. The
   unchanged scanner emitted no structured row when a production login route
   passed `request.body.password` to `bcrypt.compare` behind an inert

@@ -2,6 +2,46 @@
 
 This log records consequential implementation decisions, their evidence, and the tradeoffs that future scanner work must preserve.
 
+## 2026-08-31 — Recover complete drafts after Copilot tears down a model resource
+
+**Observed production failure.** A real stored-credential deep self-scan ran
+one uninterrupted high-reasoning Copilot session over the exact tracked
+Express-cookie checkpoint. The model produced a completed scan manifest,
+findings document, complete coverage, threat model, all discovery-pass
+receipts, validation and attack-path ledgers, and reconciliation output. The
+provider then returned HTTP 400 `The resource you requested was not found`.
+This was not an authentication, classifier, quota, AI-credit, rate-limit, or
+ordinary transport failure. The CLI correctly preserved partial output but
+exited unsuccessfully before asking deterministic host finalization to judge
+the complete drafts.
+
+**Narrow recovery decision.** Treat only an SDK error containing HTTP 400 or
+404 plus the exact requested-resource-not-found condition as eligible for
+post-draft recovery. Eligibility still requires all three expected draft
+artifacts. Convert that state to `CompleteDraftArtifactsError`, which is not a
+fresh-session retry signal; the API then runs the existing deterministic host
+finalizer and accepts the scan only if target identity, scope, artifact schema,
+coverage closure, finding evidence, and all host seals validate. This preserves
+useful completed work when a provider-side session or response resource is
+removed after generation without treating the provider error itself as
+success.
+
+**Fail-closed boundary.** Missing or partial drafts remain failures.
+Authentication and authorization errors, safety-classifier refusals,
+cancellation, sandbox violations, scanner-owned `CopilotSecurityError`
+contracts, and unrelated 400/404 responses remain terminal. The change does
+not broaden fresh-session retry classification and does not trust a model's
+`completed` string. Deterministic host validation remains the only authority
+that can recover the result.
+
+**Regression evidence.** The new assertion began red: complete draft files
+plus the observed HTTP 400 produced `null` from the recovery adapter. After the
+narrow classification, the Copilot port and API event-finalization suites pass
+66/66 tests with 272 assertions at the native Windows filesystem boundary.
+TypeScript and generated-model checks and a clean production build also pass.
+A second real self-scan with the hardened executable is the next acceptance
+step; the scanner-effectiveness goal remains active.
+
 ## 2026-08-31 — Prove browser-readable signed Express cookies without conflating adjacent attributes
 
 **Measured gap and maintained comparator.** A production Express session
@@ -82,9 +122,32 @@ Eight focused tests pass with 37 assertions after the two-pass/six-failure red
 baseline, including multiline direct signing with a trailing comma. Fifty-five
 adjacent Express, corpus-pairing, and evaluator tests pass with 3,004
 assertions. The canonical corpus now contains 211 exploit/control pairs, 422
-cases, and 1,266 repeated scan positions. Full packaging, self-scan, desktop,
-and hosted acceptance remains the next checkpoint; the scanner-effectiveness
-goal remains active.
+cases, and 1,266 repeated scan positions.
+
+**Local acceptance evidence.** The exhaustive Windows lane records 2,279
+passes, 31 intentional skips, and 17,579 assertions across 2,312 tests and 225
+files in 1,056.00 seconds. Its two restricted-session failures—the temporary
+Git benchmark fixture and private credential-home ACL—pass in a 48/48 native
+rerun with 242 assertions. Formatting, generated models, TypeScript, the clean
+production build, and the production advisory audit pass. Two independent
+299-entry archives are byte-identical at 2,560,376 bytes with SHA-256
+`60090255375b1354f4ae919a5926bb497a8d92a5440d2a2228d62884d4d738a2`;
+each isolated install validates 67 production packages, the public API, CLI,
+and all 79 bundled plugin files. Two exact tracked-snapshot inventories are
+byte-identical at 256 rows and 642,719 bytes with SHA-256
+`be76b402d93384df0fca29667136e2f16f4581abd4adf7a2e3f8b66183e55a16`;
+only the readable fixture emits the new row, at signing line 14 and cookie line 19. The HttpOnly control is absent.
+
+Windows builds with zero warnings/errors, passes 7/7 core and 3/3 shared
+desktop tests, and publishes a 346,796-byte executable with SHA-256
+`8f2947eeeb5cd2e2aa70426ce41511191983b784985ad2abfe30de4d97ac6a65`
+that remains alive under controlled hidden startup. Ubuntu/WSL restores the
+locked graph, builds with zero warnings/errors, passes those suites plus 2/2
+headless tests, and passes non-graphical and X11/Xvfb startup. Its 72,568-byte
+executable has SHA-256
+`7e29d642169a6c218c249216c6c10648307aea88faf636b69ac25741104b4adf`.
+Hosted and hardened self-scan closure remain the next checkpoints; the
+scanner-effectiveness goal remains active.
 
 ## 2026-08-31 — Require live Fastify rate-limit activation at authentication verifiers
 

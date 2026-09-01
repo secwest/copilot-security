@@ -636,6 +636,17 @@ describe("Copilot port", () => {
         environment,
       ),
     ).toBeNull();
+
+    const missingResource = new Error(
+      "400 The resource you requested was not found. (Request ID: redacted)",
+    );
+    const missingResourceRecovery =
+      await modelFailureAfterCompleteDraftArtifacts(
+        missingResource,
+        environment,
+      );
+    expect(missingResourceRecovery).toBeInstanceOf(CompleteDraftArtifactsError);
+    expect(missingResourceRecovery?.cause).toBe(missingResource);
   });
 
   test("moves complete timed-out drafts into bounded fresh-session quality correction", async () => {

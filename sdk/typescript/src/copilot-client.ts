@@ -876,11 +876,28 @@ export async function modelFailureAfterCompleteDraftArtifacts(
   error: unknown,
   environment: Record<string, string>,
 ): Promise<CompleteDraftArtifactsError | null> {
-  if (freshSessionRetryReason(error) === null) return null;
+  if (
+    freshSessionRetryReason(error) === null &&
+    !isPostDraftResourceNotFound(error)
+  ) {
+    return null;
+  }
   if (!(await hasDraftArtifacts(environment))) return null;
   return new CompleteDraftArtifactsError(
     "Copilot's model turn ended after producing all scan drafts; deterministic host validation will decide whether the scan can be recovered.",
     { cause: error },
+  );
+}
+
+function isPostDraftResourceNotFound(error: unknown): boolean {
+  if (
+    error instanceof CopilotSecurityError ||
+    isSafetyClassifierRefusal(error)
+  ) {
+    return false;
+  }
+  return /\b(?:400|404)\b[^\r\n]{0,512}\bresource you requested was not found\b/iu.test(
+    errorMessage(error).slice(0, 8 * 1024),
   );
 }
 
