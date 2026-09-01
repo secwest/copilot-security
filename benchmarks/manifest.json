@@ -10934,6 +10934,76 @@
         "node-express-verified-jwt-authorization/run-3/findings.json"
       ],
       "expected": []
+    },
+    {
+      "id": "node-express-sendfile-path-disclosure",
+      "description": "An Express download route passes a remote absolute path to sendFile without root confinement.",
+      "fixture": "fixtures/node-express-sendfile-path-disclosure",
+      "findingsPaths": [
+        "node-express-sendfile-path-disclosure/run-1/findings.json",
+        "node-express-sendfile-path-disclosure/run-2/findings.json",
+        "node-express-sendfile-path-disclosure/run-3/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "node-express-sendfile-path-disclosure",
+          "cwe": ["CWE-22"],
+          "locations": [
+            {
+              "path": "src/server.js",
+              "startLine": 7,
+              "endLine": 7,
+              "lineTolerance": 1
+            }
+          ],
+          "acceptableSeverities": ["high", "medium"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true,
+          "requiredValidationTextAnyOf": [
+            ["Express 5", "express@5.2.1", "Express application"],
+            ["GET /download", "/download route", "literal route"],
+            ["request.query.path", "query path", "remote path"],
+            ["response.sendFile", "sendFile path", "filesystem read"],
+            ["absolute path", "host filesystem", "service account"],
+            ["root option absent", "missing root", "without root"],
+            ["fixed absolute root", "root confinement"],
+            ["CWE-22", "path traversal", "file disclosure"]
+          ],
+          "requiredAttackPathTextAnyOf": [
+            ["attacker-selected absolute path", "remote absolute path"],
+            ["sendFile", "filesystem read"],
+            ["outside marker", "outside file", "outside the download root"],
+            ["service account", "read permissions"],
+            ["fixed absolute root", "root confinement"],
+            ["in-memory", "no listener", "no network request"]
+          ],
+          "forbiddenText": [
+            "the witness started Express",
+            "the witness opened a listener",
+            "the witness sent a network request",
+            "the witness read a real credential",
+            "the witness read a system file",
+            "proves public reachability",
+            "proves credential disclosure",
+            "proves code execution",
+            "proves host compromise",
+            "dotfiles prevents absolute path access",
+            "path.resolve sanitizes the path"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "node-express-root-confined-sendfile",
+      "description": "The topology-matched control supplies a fixed absolute root that confines the same remote path.",
+      "fixture": "fixtures/node-express-root-confined-sendfile",
+      "findingsPaths": [
+        "node-express-root-confined-sendfile/run-1/findings.json",
+        "node-express-root-confined-sendfile/run-2/findings.json",
+        "node-express-root-confined-sendfile/run-3/findings.json"
+      ],
+      "expected": []
     }
   ]
 }

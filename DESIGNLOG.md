@@ -2,6 +2,65 @@
 
 This log records consequential implementation decisions, their evidence, and the tradeoffs that future scanner work must preserve.
 
+## 2026-09-01 — Model Express sendFile as a filesystem boundary
+
+**Measure the gap at the application boundary.** An exact Express 5.2.1 route
+that passes `req.query.path` to `res.sendFile` without options produced no
+specialized record before this change; a source-matched route with a fixed
+absolute `root` also remained silent. Express documents that `sendFile` uses an
+absolute path unless a `root` option is set, and that a relative path is then
+validated within that root. CodeQL's high-precision
+[`js/path-injection`](https://codeql.github.com/codeql-query-help/javascript/js-path-injection/)
+query establishes the request-controlled path risk, while its
+[`JavaScript model guidance`](https://codeql.github.com/docs/codeql-language-guides/customizing-library-models-for-javascript/)
+shows why package and access-path identity belong in a reusable framework
+model. The governing runtime contract is Express's official
+[`res.sendFile` API](https://expressjs.com/en/5x/api.html#res.sendFile).
+
+**Require ownership and route evidence before interpreting method names.** The
+new `node-express-sendfile-path-disclosure` model proves exact production
+Express 4/5 resolution, an official application or Router, a literal route, a
+live handler and its request/response identities, a literal query or route-
+parameter field, and that exact remote value at argument zero of the registered
+response's `sendFile`. Local lookalikes, aliases whose identity is overwritten,
+dynamic routes, tests/examples, development-only packages, unsupported pins,
+wrong handlers, and unrelated methods named `sendFile` remain negative. The
+record carries distinct dependency, registration, source, and sink propagators
+so model review must close the actual request-to-filesystem chain.
+
+**Treat containment as a proved policy, not a hopeful transform.** No-options,
+root-free-options, options-plus-callback, and inline-callback forms are missing-
+root sinks. `path.resolve(req.query.path)` remains reportable because it creates
+the absolute filename Express requires; it neither authorizes the target nor
+confines it. A literal fixed absolute `root` is the deterministic control.
+Relative, computed, spread, dynamic, environment-derived, request-derived, or
+unresolved options/root values are ambiguous and produce neither a specialized
+finding nor a false safe result. Object root policies later changed through
+assignment, computed assignment, deletion, `Object.assign`,
+`Object.defineProperty`, or `Reflect.set` are rejected as controls.
+
+**Keep the precision claim executable.** The vulnerable real-Express witness
+serves an allowed file and returns HTTP 200 with an outside file for the hostile
+path; the fixed-root control still serves the allowed file but returns HTTP 404
+for that traversal. Both use inert in-memory request/response objects and
+temporary files, start no listener, and send no network request. The focused
+model/benchmark lanes pass 31 tests with 3,003 assertions; the dedicated model
+matrix contributes 13 tests and 62 assertions. A native Windows rerun of the
+affected benchmark, ACL, and canonical-count lanes passes 57 tests with 315
+assertions. The strict pair grows the canonical corpus to 215 pairs, 430 cases,
+and 1,290 repeated positions. The scanner-effectiveness goal remains active.
+
+**Regression and distribution closure.** The complete native Windows suite
+passes 2,326 tests with 31 intentional platform or real-service skips, zero
+failures, and 17,988 assertions across 2,357 tests and 229 files in 1,080.59
+seconds. Formatting, generated models, TypeScript, and the production build are
+clean. Two independent package builds are byte-identical at 299 entries and
+2,588,710 bytes with SHA-256
+`fa5038106ece1e99095a739e0a8be4734759630213e4890f21e792bec7b6aae1`.
+Native strict inspection installs 67 production packages and validates the
+public import, executable CLI, and all 79 bundled plugin files. The live
+production advisory audit reports no known vulnerabilities.
+
 ## 2026-09-01 — Retry provider resource loss only after complete drafts
 
 **The self-scan exercised two independent failure layers.** The immutable

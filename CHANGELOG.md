@@ -6,6 +6,41 @@ All notable scanner, application, benchmark, and operational changes are recorde
 
 ### Scanner effectiveness
 
+- Closed a measured Express filesystem-boundary false negative. Before the new
+  model, a production-shaped route that passed `req.query.path` to
+  `res.sendFile` without a root produced no specialized row; its
+  topology-matched fixed-absolute-root control also remained silent.
+- Added `node-express-sendfile-path-disclosure` with CWE-22 evidence. The
+  deterministic model proves exact production Express 4/5 dependencies,
+  official application or Router identity, a literal registered route, live
+  handler/request/response identities, an exact query or route-parameter
+  source, and the exact response `sendFile` path argument. A fixed absolute
+  `root` confines the relative path and suppresses the row. Missing-root
+  overloads remain reportable, including inline callbacks and
+  `path.resolve(untrusted)`, while dynamic, relative, computed, spread,
+  request-derived, environment-derived, unresolved, or later-mutated root
+  policies fail closed instead of manufacturing either a finding or a control.
+- Added pinned Express 5.2.1 vulnerable/control fixtures, a strict specialized
+  manifest, and real-library inert witnesses. The vulnerable witness serves an
+  allowed file and discloses an outside file with HTTP 200; the fixed-root
+  control serves the allowed file but returns HTTP 404 for the same traversal.
+  Neither witness starts a listener or sends a network request. The focused
+  model and benchmark lanes pass 31/31 tests with 3,003 assertions, and the
+  model's 13-case ownership, overload, mutation, ambiguity, source, and control
+  matrix passes with 62 assertions. A native Windows rerun of the affected
+  benchmark, ACL, and corpus-count regressions passes 57/57 with 315
+  assertions. The canonical corpus now contains 215 exploit/control pairs,
+  430 cases, and 1,290 repeated scan positions.
+- The complete native Windows regression suite passes 2,326 tests with 31
+  intentional platform or real-service skips, zero failures, and 17,988
+  assertions across 2,357 tests and 229 files in 1,080.59 seconds. Formatting,
+  generated models, TypeScript, and the production build are clean.
+- Two independently built npm archives are byte-identical at 299 entries and
+  2,588,710 bytes with SHA-256
+  `fa5038106ece1e99095a739e0a8be4734759630213e4890f21e792bec7b6aae1`.
+  Native strict inspection installs 67 production packages and validates the
+  public import, executable CLI, and all 79 bundled plugin files. The live
+  production advisory audit reports no known vulnerabilities.
 - Closed a measured Express authorization false negative. Before the new model,
   a production-shaped route that extracted a Bearer token, called official
   `jsonwebtoken.decode`, trusted its `role` claim, and returned protected data

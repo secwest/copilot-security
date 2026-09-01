@@ -69,6 +69,14 @@ defaults, local module lookalikes, rebinding, mutation, model escape, ambiguous
 fields, and `ClassVar` selection fail closed. Topology-matched TestClient pairs
 distinguish hostile direct and embedded body fields from fixed `ClassVar`
 values excluded from Pydantic request data.
+The Node pass also models Express `res.sendFile` as an exact filesystem
+boundary. It requires a production Express 4/5 application or Router, a
+literal registered route, live request/response identities, and a query or
+route-parameter value at the path argument. A fixed absolute `root` confines a
+relative path; no root remains reportable, and `path.resolve(untrusted)` does
+not become authorization. Dynamic, relative, computed, spread, mutated, or
+request/environment-derived root policies remain ambiguous rather than being
+credited as controls.
 The same pass independently models FastAPI open redirects. It requires one
 stable string query parameter on an official path operation and one exact
 non-shadowed FastAPI or Starlette `RedirectResponse`. The redirect boundary may

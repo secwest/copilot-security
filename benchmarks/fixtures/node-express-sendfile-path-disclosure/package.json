@@ -1,0 +1,8 @@
+{
+  "name": "node-express-sendfile-path-disclosure",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "express": "5.2.1"
+  }
+}

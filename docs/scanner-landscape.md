@@ -1600,11 +1600,46 @@ string lookalikes. Argument order and runtime-compilation behavior follow the
 with fixtures pinned to the official RazorLight 2.3.1 package and explicit
 patched .NET 8 dependency floors for its legacy caching and JSON transitives.
 
+## Implemented: Express sendFile path disclosure
+
+Express's official
+[`res.sendFile` documentation](https://expressjs.com/en/5x/api.html#res.sendFile)
+states that the path must be absolute unless a `root` option is set, and that
+relative paths are then validated within the configured root. CodeQL's
+high-precision [`js/path-injection`](https://codeql.github.com/codeql-query-help/javascript/js-path-injection/)
+query covers request-controlled filesystem paths, and its
+[`JavaScript model guidance`](https://codeql.github.com/docs/codeql-language-guides/customizing-library-models-for-javascript/)
+provides the package/access-path vocabulary needed to model framework
+boundaries. The measured local gap was narrower and source-provable: an exact
+Express route passed `req.query.path` to `res.sendFile` without a root and
+produced no specialized row.
+
+Copilot Security now proves the production Express 4/5 package, official
+application or Router, literal route registration, live handler request and
+response identities, exact query or route-parameter field, and argument-zero
+`sendFile` sink before emitting CWE-22. A fixed absolute root suppresses the
+row. No-options and root-free overloads remain reportable, including an inline
+callback and `path.resolve` around the untrusted value. Dynamic, relative,
+computed, spread, environment-derived, request-derived, unresolved, or
+subsequently mutated root policies fail closed. This is not a claim to model
+arbitrary Express data flow or every filesystem wrapper: extensions require a
+new measured miss and source-matched control.
+
+The strict pair and real Express witnesses preserve that boundary. The
+positive serves an ordinary in-root file and discloses an outside file with
+HTTP 200; the fixed-root control serves the ordinary file and returns HTTP 404
+for traversal. Both are listener-free, network-free, and use disposable local
+data. Focused tests cover overloads, Router and CommonJS ownership, rebindings,
+version/dependency evidence, mutations, ambiguous policies, sources, and the
+fixed-root control.
+
 ## Prioritized next improvements
 
 1. **Expand typed framework security models.** Extend Node/TypeScript, Python,
    Java, and ASP.NET beyond their current three exact import or service
    boundaries only with measured false-negative evidence;
+   extend the Express `sendFile` lane beyond its current same-file query and
+   route-parameter boundary only with a matched confined-path control;
    extend the shipped routed Sails Action2 declared-input path source beyond
    its current exact relative wrapper and two-relay boundaries or into other
    sink families only with matched route/helper and fixed-operation controls;

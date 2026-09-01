@@ -721,6 +721,10 @@ describe("effectiveness benchmark", () => {
         "node-express-unverified-jwt-authorization",
         "node-express-verified-jwt-authorization",
       ],
+      [
+        "node-express-sendfile-path-disclosure",
+        "node-express-root-confined-sendfile",
+      ],
       ["node-fastify-open-redirect", "node-fastify-safe-local-redirect"],
       [
         "node-vue-router-client-request-forgery",

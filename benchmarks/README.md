@@ -1455,6 +1455,35 @@ code evidence, validation of the trust boundary, a source-to-effect attack
 path, bounded impact language, and no control finding. The canonical manifest
 repeats the pair three times.
 
+`node-express-sendfile-path-disclosure-manifest.json` isolates the Express
+filesystem boundary under the same gates. Its Express 5.2.1 positive passes a
+literal query field to `res.sendFile` without a root. The topology-matched
+control supplies a fixed absolute `root` and keeps the same remote relative
+path. The specialized evaluator requires CWE-22, exact code evidence,
+validation of Express path semantics, a source-to-file attack path, bounded
+disclosure impact, and no control finding. Real Express witnesses use inert
+in-memory HTTP objects and disposable files: the positive serves an allowed
+file and discloses the outside file with HTTP 200, while the control serves the
+allowed file and returns HTTP 404 for traversal. Neither starts a listener nor
+sends a network request.
+
+Run the pair alone from `sdk/typescript`:
+
+```powershell
+node ../../benchmarks/run-benchmark.mjs `
+  --manifest ../../benchmarks/node-express-sendfile-path-disclosure-manifest.json `
+  --results-dir C:\security-benchmarks\copilot-security-express-sendfile `
+  --runs 1 `
+  --selection-only `
+  --auth github `
+  --model gpt-5.6-sol `
+  --effort high `
+  --mode deep
+```
+
+With this pair, the canonical manifest contains 215 exploit/control pairs,
+430 cases, and 1,290 repeated scan positions.
+
 ## Comparing scanner versions or implementations
 
 Run both scanners against exactly the same manifest, case selection, and

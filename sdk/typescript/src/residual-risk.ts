@@ -4705,6 +4705,22 @@ const NODE_EXPRESS_OPEN_REDIRECT_FIELD_EVIDENCE_REQUIREMENTS = [
   ["CWE-601", "open redirect", "URL redirection"],
 ] as const;
 
+const NODE_EXPRESS_SENDFILE_PATH_FIELD_EVIDENCE_REQUIREMENTS = [
+  ["Express 4", "Express 5", "Express application", "Router"],
+  ["literal route", "GET /download", "registered handler"],
+  [
+    "request.query",
+    "request.params",
+    "query string",
+    "route parameter",
+    "remote path",
+  ],
+  ["response.sendFile", "sendFile path", "filesystem read"],
+  ["absolute path", "host filesystem", "service account"],
+  ["missing root", "root option absent", "fixed absolute root"],
+  ["CWE-22", "path traversal", "file disclosure"],
+] as const;
+
 const NODE_EXPRESS_SENSITIVE_COOKIE_FIELD_EVIDENCE_REQUIREMENTS = [
   ["Express 4", "Express 5", "Express application", "Router"],
   ["literal route", "POST /session", "registered handler"],
@@ -4962,6 +4978,13 @@ const MODEL_SPECIFIC_FINDING_REQUIREMENTS: ReadonlyMap<
     {
       validation: NODE_EXPRESS_OPEN_REDIRECT_FIELD_EVIDENCE_REQUIREMENTS,
       attackPath: NODE_EXPRESS_OPEN_REDIRECT_FIELD_EVIDENCE_REQUIREMENTS,
+    },
+  ],
+  [
+    "node-express-sendfile-path-disclosure",
+    {
+      validation: NODE_EXPRESS_SENDFILE_PATH_FIELD_EVIDENCE_REQUIREMENTS,
+      attackPath: NODE_EXPRESS_SENDFILE_PATH_FIELD_EVIDENCE_REQUIREMENTS,
     },
   ],
   [
@@ -5369,6 +5392,7 @@ export async function buildResidualRiskInventory(
   records.push(...nodeContentfulMcpManagementTokenLeakRecords(sourceFiles));
   records.push(...nodeNextJsDynamicRouteAuthorizationRecords(sourceFiles));
   records.push(...nodeExpressOpenRedirectRecords(sourceFiles));
+  records.push(...nodeExpressSendFilePathDisclosureRecords(sourceFiles));
   records.push(...nodeExpressSensitiveCookieRecords(sourceFiles));
   records.push(...nodeExpressCredentialedCorsRecords(sourceFiles));
   records.push(...nodeExpressUnverifiedJwtAuthorizationRecords(sourceFiles));
@@ -25901,6 +25925,325 @@ function nodeExpressOpenRedirectRecords(
             });
             if (records.length >= MAX_FRAMEWORK_CROSS_FILE_RECORDS)
               return records;
+          }
+        }
+      }
+    }
+  }
+  return records;
+}
+
+type NodeExpressSendFileRootPolicy =
+  | { kind: "ambiguous"; line: number }
+  | { kind: "fixed-absolute-root"; line: number; root: string }
+  | { kind: "missing-root"; line: number };
+
+function nodeExpressInlineCallback(value: string): boolean {
+  return /^(?:async\s+)?(?:\([^)]*\)\s*=>|function\b)/su.test(value.trim());
+}
+
+function nodeExpressSendFileRootPolicy(
+  lines: readonly string[],
+  arguments_: readonly string[],
+  sinkLine: number,
+): NodeExpressSendFileRootPolicy {
+  if (arguments_.length === 1) {
+    return { kind: "missing-root", line: sinkLine };
+  }
+  if (arguments_.length < 2 || arguments_.length > 3) {
+    return { kind: "ambiguous", line: sinkLine };
+  }
+  const second = arguments_[1]?.trim() ?? "";
+  if (arguments_.length === 2 && nodeExpressInlineCallback(second)) {
+    return { kind: "missing-root", line: sinkLine };
+  }
+  if (
+    arguments_.length === 3 &&
+    !nodeExpressInlineCallback(arguments_[2] ?? "") &&
+    !/^[A-Za-z_$][\w$]*$/u.test(arguments_[2]?.trim() ?? "")
+  ) {
+    return { kind: "ambiguous", line: sinkLine };
+  }
+  if (/^[A-Za-z_$][\w$]*$/u.test(second)) {
+    const initializer = javascriptVariableInitializer(lines, second, sinkLine);
+    if (initializer !== undefined) {
+      const escaped = escapeRegularExpression(second);
+      const mutation = new RegExp(
+        `(?:\\b${escaped}\\s*(?:\\.\\s*root|\\[\\s*["']root["']\\s*\\])\\s*=|\\bdelete\\s+${escaped}\\s*(?:\\.\\s*root|\\[\\s*["']root["']\\s*\\])|\\b(?:Object\\s*\\.\\s*(?:assign|defineProperty)|Reflect\\s*\\.\\s*set)\\s*\\(\\s*${escaped}\\b)`,
+        "u",
+      );
+      if (
+        javascriptStructuralLines(lines.slice(initializer.line, sinkLine)).some(
+          (line) => mutation.test(line),
+        )
+      ) {
+        return { kind: "ambiguous", line: initializer.line };
+      }
+    }
+  }
+  const options = resolvedJavascriptExpression(lines, second, sinkLine);
+  const trimmed = options.value.trim();
+  const object = javascriptCompositePrefix(trimmed, "{", "}");
+  if (
+    object === undefined ||
+    object.length !== trimmed.length ||
+    /\.\.\.|(?:^|[,{}])\s*\[[^\]]+\]\s*:/u.test(trimmed)
+  ) {
+    return { kind: "ambiguous", line: options.line };
+  }
+  const entries = javascriptObjectEntries(options);
+  const root = entries.filter((entry) => entry.key === "root").at(-1);
+  if (root === undefined) {
+    return { kind: "missing-root", line: options.line };
+  }
+  const resolvedRoot = resolvedJavascriptExpression(
+    lines,
+    root.value,
+    root.line,
+  );
+  const literalRoot = nodeStaticString(resolvedRoot.value);
+  if (
+    literalRoot !== undefined &&
+    (isAbsolute(literalRoot) || posix.isAbsolute(literalRoot))
+  ) {
+    return {
+      kind: "fixed-absolute-root",
+      line: resolvedRoot.line,
+      root: literalRoot,
+    };
+  }
+  return { kind: "ambiguous", line: root.line };
+}
+
+function nodeExpressSendFilePathDisclosureRecords(
+  files: readonly SourceFileSnapshot[],
+): ResidualRiskRecord[] {
+  const records: ResidualRiskRecord[] = [];
+  const emitted = new Set<string>();
+  for (const file of files) {
+    if (
+      !JAVASCRIPT_EXTENSIONS.has(file.extension) ||
+      javascriptTestOrExamplePath(file.path)
+    ) {
+      continue;
+    }
+    const dependency = nodeRuntimeDependency(files, file.path, "express");
+    const majorVersion = Number(dependency?.version.split(".")[0]);
+    if (
+      dependency === undefined ||
+      !Number.isSafeInteger(majorVersion) ||
+      (majorVersion !== 4 && majorVersion !== 5)
+    ) {
+      continue;
+    }
+    const structural = javascriptStructuralLines(file.lines).join("\n");
+    for (const instance of nodeExpressInstanceBindings(file.lines)) {
+      const escapedInstance = escapeRegularExpression(instance.local);
+      const routeCallee = new RegExp(
+        `\\b${escapedInstance}\\s*\\.\\s*(?:all|delete|get|head|options|patch|post|put)\\s*\\(`,
+        "u",
+      );
+      for (const route of javascriptCallsInText(
+        file.text,
+        structural,
+        1,
+        routeCallee,
+      )) {
+        if (
+          route.line <= instance.line ||
+          nodeStaticString(route.arguments[0]) === undefined ||
+          javascriptIdentifierReassignedBetween(
+            file.lines,
+            instance.local,
+            instance.line,
+            route.line,
+          ) ||
+          file.lines
+            .slice(instance.line, route.line - 1)
+            .some((line) =>
+              new RegExp(
+                `\\b${escapedInstance}\\s*\\.\\s*(?:all|delete|get|head|options|patch|post|put|use)\\s*=`,
+                "u",
+              ).test(javascriptCodeBeforeComment(line)),
+            )
+        ) {
+          continue;
+        }
+        const routeEndLine =
+          1 + (structural.slice(0, route.close).match(/\n/gu)?.length ?? 0);
+        for (const handlerArgument of route.arguments.slice(1)) {
+          const inline = nodeExpressHandlerParameters(handlerArgument);
+          const named = /^[A-Za-z_$][\w$]*$/u.test(handlerArgument.trim())
+            ? nodeExpressNamedHandler(
+                file.lines,
+                handlerArgument.trim(),
+                route.line,
+              )
+            : undefined;
+          const handler: NodeExpressHandlerScope | undefined =
+            inline === undefined
+              ? named
+              : {
+                  ...inline,
+                  endLine: routeEndLine,
+                  startLine: route.line,
+                };
+          if (handler === undefined) continue;
+          if (
+            (handler.symbol !== undefined &&
+              javascriptIdentifierReassignedBetween(
+                file.lines,
+                handler.symbol,
+                handler.startLine,
+                route.line,
+              )) ||
+            javascriptIdentifierReassignedBetween(
+              file.lines,
+              handler.request,
+              handler.startLine,
+              handler.endLine + 1,
+            ) ||
+            javascriptIdentifierReassignedBetween(
+              file.lines,
+              handler.response,
+              handler.startLine,
+              handler.endLine + 1,
+            )
+          ) {
+            continue;
+          }
+          const escapedResponse = escapeRegularExpression(handler.response);
+          const handlerLines = file.lines.slice(
+            handler.startLine - 1,
+            handler.endLine,
+          );
+          const handlerText = handlerLines.join("\n");
+          const handlerStructural =
+            javascriptStructuralLines(handlerLines).join("\n");
+          const sourcePatterns = nodeExpressSourcePatterns(
+            handler.request,
+            false,
+          );
+          const sources = matchingJavascriptModelLines(
+            file.lines,
+            sourcePatterns,
+            16,
+          ).filter(
+            ({ line }) => line >= handler.startLine && line <= handler.endLine,
+          );
+          for (const sendFile of javascriptCallsInText(
+            handlerText,
+            handlerStructural,
+            handler.startLine,
+            new RegExp(`\\b${escapedResponse}\\s*\\.\\s*sendFile\\s*\\(`, "u"),
+          )) {
+            const path = sendFile.arguments[0]?.trim();
+            if (path === undefined || path === "") continue;
+            const prefix = handlerStructural.slice(0, sendFile.start);
+            if (
+              nodeExpressBindingAssignedInText(prefix, handler.request) ||
+              nodeExpressBindingAssignedInText(prefix, handler.response) ||
+              new RegExp(
+                `\\b${escapedResponse}\\s*\\.\\s*sendFile\\s*=`,
+                "u",
+              ).test(prefix)
+            ) {
+              continue;
+            }
+            const source = modeledCallSource(
+              file.lines,
+              sources,
+              sendFile.line,
+              path,
+              sourcePatterns,
+            );
+            if (source === undefined) continue;
+            const rootPolicy = nodeExpressSendFileRootPolicy(
+              file.lines,
+              sendFile.arguments,
+              sendFile.line,
+            );
+            if (rootPolicy.kind !== "missing-root") continue;
+            const key = `${file.path}\0${source.line}\0${sendFile.line}`;
+            if (emitted.has(key)) continue;
+            emitted.add(key);
+            const startLine = Math.max(1, sendFile.line - CONTEXT_LINES_BEFORE);
+            const endLine = Math.min(
+              file.lines.length,
+              sendFile.line + CONTEXT_LINES_AFTER,
+            );
+            records.push({
+              path: file.path,
+              line: sendFile.line,
+              categories: [
+                "framework-dataflow:node-express-sendfile-path-disclosure",
+                `modeled-source:${source.kind}`,
+                "modeled-sink:express-response-sendfile-filesystem-read",
+                "missing-control:express-sendfile-fixed-absolute-root",
+              ],
+              priority: 116,
+              startLine,
+              endLine,
+              excerpt: sourceExcerpt(file.lines, startLine, endLine),
+              sourceExcerpt: sourceExcerpt(
+                file.lines,
+                Math.max(1, source.line - 1),
+                Math.min(file.lines.length, source.line + 1),
+              ),
+              frameworkModel: {
+                schemaVersion: "1.2",
+                id: "node-express-sendfile-path-disclosure",
+                language: "javascript-typescript",
+                scope: "same-file",
+                source: {
+                  kind: source.kind,
+                  path: file.path,
+                  line: source.line,
+                },
+                sink: {
+                  kind: "express-response-sendfile-filesystem-read",
+                  path: file.path,
+                  line: sendFile.line,
+                  cweIds: ["CWE-22"],
+                },
+                propagators: [
+                  {
+                    kind: `express-${instance.kind}-factory-binding`,
+                    path: file.path,
+                    line: instance.factoryLine,
+                    symbol: instance.local,
+                  },
+                  {
+                    kind: "express-literal-route-registration",
+                    path: file.path,
+                    line: route.line,
+                    symbol: nodeStaticString(route.arguments[0]),
+                  },
+                  {
+                    kind: "express-handler-request-response-binding",
+                    path: file.path,
+                    line: handler.startLine,
+                    symbol: `${handler.request},${handler.response}`,
+                  },
+                  {
+                    kind: "express-runtime-dependency",
+                    path: dependency.manifestPath,
+                    line: dependency.line,
+                    symbol: `express@${dependency.version}:${dependency.proof}`,
+                  },
+                ],
+                candidateControls: [
+                  {
+                    kind: "express-sendfile-root-option-absent",
+                    path: file.path,
+                    line: rootPolicy.line,
+                  },
+                ],
+              },
+            });
+            if (records.length >= MAX_FRAMEWORK_CROSS_FILE_RECORDS) {
+              return records;
+            }
           }
         }
       }
