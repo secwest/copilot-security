@@ -70,6 +70,36 @@ All notable scanner, application, benchmark, and operational changes are recorde
   passes those suites plus 2/2 headless Linux tests, and passes non-graphical
   and X11/Xvfb startup. Its 72,568-byte executable has SHA-256
   `7e29d642169a6c218c249216c6c10648307aea88faf636b69ac25741104b4adf`.
+- Hosted implementation checkpoint
+  `455ab5b375adb5e48d91bd91bba3aefc6f38933b` passes 91/92 Node jobs and all
+  ten other workflow families. Its Windows Node 22 job was still making clean
+  progress through the complete regression suite when the workflow's
+  15-minute step limit expired; the same local lane requires 16m48s. Corrective
+  checkpoint `2d84baf88f0547e7be257268ad75665d1456b397` raises only that exhaustive
+  test-step limit to 22 minutes, below the existing 30-minute job limit. Node
+  run `33467955493` then passes all 92 jobs. Windows GUI `33467955598`, Linux
+  GUI `33467955549`, Java `33467955625`, Kotlin `33467955471`, .NET
+  `33467955481`, Go `33467955671`, Rust `33467955524`, Ruby `33467956098`, and
+  PHP `33467955450` also pass; implementation container run `33466481938`
+  passes and the workflow-only correction does not retrigger it.
+- A clean authenticated deep self-scan binds exact corrective checkpoint
+  `2d84baf88f0547e7be257268ad75665d1456b397`, six selected implementation and
+  benchmark paths, and snapshot digest
+  `copilot-security-snapshot/v1:sha256:77cdabe9fd2056811f7ba76ebc512af659cfd793b6c2f5fc16008e6cab7ed1e6`.
+  One high-reasoning `gpt-5.6-sol` session completes in 15m29s with all eight
+  expanded surfaces at `no_issue_found`, complete coverage, zero retained
+  product findings, and no deferral, refusal, retry, quota, credit,
+  authentication, rate-limit, or transport error. It consumes 2,575,659 input
+  tokens, including 2,290,344 cached, and 35,462 output tokens at a
+  $3.9913795 metered estimate. All 11 sealed artifact hashes independently
+  recompute. The candidate, validation, and attack-path ledgers each retain one
+  review row, while the final evidence gate discards its repository-mismatched
+  evidence instead of manufacturing a finding. The intentionally vulnerable
+  benchmark fixture is not represented as a production defect.
+- An earlier self-scan of the implementation checkpoint correctly failed
+  closed at save time after the workflow-limit correction changed `HEAD`.
+  Partial output was retained for diagnosis, but no completion or clean-scan
+  conclusion is inferred from a target whose registered revision changed.
 - Closed a measured browser `postMessage` sensitive-data disclosure false
   negative. The unchanged scanner emitted no structured row when production
   JavaScript read the credential-shaped `localStorage` key `access_token` and

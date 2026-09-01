@@ -103,6 +103,36 @@ Ubuntu/WSL GUI builds, execution-core/shared/headless tests, self-contained
 publication, and non-graphical plus X11 startup all pass. The scanner
 effectiveness goal remains active.
 
+**Hosted and self-scan closure.** Implementation checkpoint
+`455ab5b375adb5e48d91bd91bba3aefc6f38933b` passed all ten non-Node workflow
+families and 91/92 Node jobs. The lone Windows Node 22 job continued producing
+passing regression output until the 15-minute test-step timeout, consistent
+with the 16m48s local suite rather than a functional failure. Corrective
+checkpoint `2d84baf88f0547e7be257268ad75665d1456b397` changes only that step limit to
+22 minutes, beneath the existing 30-minute job boundary; Node run `33467955493`
+then passes 92/92 jobs. Its Windows GUI `33467955598`, Linux GUI `33467955549`,
+Java `33467955625`, Kotlin `33467955471`, .NET `33467955481`, Go `33467955671`,
+Rust `33467955524`, Ruby `33467956098`, and PHP `33467955450` runs pass, as does
+implementation container run `33466481938`.
+
+A clean stored-credential self-scan fixes its target at the corrective
+checkpoint and snapshot digest
+`copilot-security-snapshot/v1:sha256:77cdabe9fd2056811f7ba76ebc512af659cfd793b6c2f5fc16008e6cab7ed1e6`.
+It examines the model, reviewer prompt, exploit/control fixtures, focused test,
+and specialized manifest in one `gpt-5.6-sol` high-reasoning session. The run
+finishes in 15m29s with complete eight-surface coverage, zero retained product
+findings, and no deferral, refusal, retry, quota, credit, authentication,
+rate-limit, or transport error. It accounts for 2,575,659 input tokens
+(2,290,344 cached), 35,462 output tokens, and a $3.9913795 metered estimate.
+All 11 final artifact hashes independently match. The scanner retains one row
+in each candidate, validation, and attack-path ledger but discards the proposed
+finding because one evidence item does not match the registered repository,
+demonstrating the intended fail-closed evidence boundary. The inert benchmark
+route is intentional security-test material, not a production defect. An
+earlier scan correctly refused finalization when `HEAD` changed after target
+registration; its partial output is diagnostic only and is not counted as a
+completed scan.
+
 ## 2026-08-31 — Bound sensitive browser messages to exact receiver origins
 
 **Measured gap and comparator.** A minimal production JavaScript bridge read
