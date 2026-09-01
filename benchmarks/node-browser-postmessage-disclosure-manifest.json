@@ -1,0 +1,82 @@
+{
+  "schemaVersion": "1.0",
+  "thresholds": {
+    "minCompletionRate": 1,
+    "minPrecision": 1,
+    "minRecall": 1,
+    "minF1": 1,
+    "minCasePassRate": 1,
+    "minNegativeCasePassRate": 1,
+    "minStableDetectionRate": 1,
+    "minValidationRate": 1,
+    "minAttackPathRate": 1,
+    "minCodeEvidenceRate": 1,
+    "minSeverityAccuracy": 1,
+    "maxFalsePositivesPerRun": 0
+  },
+  "cases": [
+    {
+      "id": "node-browser-postmessage-wildcard-sensitive-data",
+      "description": "A credential-shaped browser-storage value reaches a navigable parent window through the postMessage options overload with wildcard targetOrigin.",
+      "fixture": "fixtures/node-browser-postmessage-wildcard-sensitive-data",
+      "findingsPaths": [
+        "node-browser-postmessage-wildcard-sensitive-data/run-1/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "node-browser-postmessage-wildcard-sensitive-data",
+          "cwe": ["CWE-201", "CWE-359"],
+          "locations": [
+            {
+              "path": "src/session-bridge.js",
+              "startLine": 4,
+              "endLine": 4,
+              "lineTolerance": 1
+            }
+          ],
+          "acceptableSeverities": ["high", "medium"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true,
+          "requiredValidationTextAnyOf": [
+            ["localStorage", "browser storage", "access_token"],
+            ["access token", "session credential", "sensitive data"],
+            ["window.parent", "parent window", "embedding window"],
+            ["postMessage", "options overload", "targetOrigin"],
+            ["wildcard", "any origin", "unrestricted origin"],
+            ["CWE-201", "CWE-359", "information disclosure"]
+          ],
+          "requiredAttackPathTextAnyOf": [
+            ["localStorage", "access_token", "browser storage"],
+            ["session payload", "access token", "sensitive value"],
+            ["window.parent", "parent window", "embedding window"],
+            ["targetOrigin", "wildcard", "options overload"],
+            ["navigated cross-origin", "attacker origin", "receiver origin"],
+            ["in-memory", "no network request", "starts no browser"]
+          ],
+          "forbiddenText": [
+            "the witness made a network request",
+            "the witness started a browser",
+            "proves the deployed parent is attacker controlled",
+            "proves the token was accepted",
+            "proves account takeover",
+            "proves a privileged action occurred",
+            "proves the application is publicly reachable",
+            "every postMessage call is vulnerable",
+            "every wildcard message discloses credentials",
+            "the host is fully compromised"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "node-browser-postmessage-fixed-origin-sensitive-data",
+      "description": "The topology-matched control sends the same sensitive payload only to the complete intended portal origin.",
+      "fixture": "fixtures/node-browser-postmessage-fixed-origin-sensitive-data",
+      "findingsPaths": [
+        "node-browser-postmessage-fixed-origin-sensitive-data/run-1/findings.json"
+      ],
+      "expected": []
+    }
+  ]
+}

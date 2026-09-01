@@ -4747,6 +4747,20 @@ const NODE_ANGULAR_HOST_LISTENER_ORIGIN_FIELD_EVIDENCE_REQUIREMENTS = [
   ["CWE-20", "CWE-940", "missing origin verification"],
 ] as const;
 
+const NODE_BROWSER_POSTMESSAGE_DISCLOSURE_FIELD_EVIDENCE_REQUIREMENTS = [
+  [
+    "localStorage",
+    "sessionStorage",
+    "document.cookie",
+    "sensitive browser data",
+  ],
+  ["access token", "refresh token", "session credential", "cookie"],
+  ["window.parent", "window.top", "window.opener", "popup window"],
+  ["postMessage", "targetOrigin", "wildcard origin", "options overload"],
+  ["navigated window", "embedding window", "cross-origin receiver"],
+  ["CWE-201", "CWE-359", "information disclosure", "privacy violation"],
+] as const;
+
 const NODE_MCP_TOOL_SSRF_FIELD_EVIDENCE_REQUIREMENTS = [
   ["MCP tool", "registerTool", "server.tool", "tool callback"],
   ["tool input", "callback input", "LLM-controlled", "client-controlled"],
@@ -4904,6 +4918,15 @@ const MODEL_SPECIFIC_FINDING_REQUIREMENTS: ReadonlyMap<
     {
       validation: NODE_ANGULAR_HOST_LISTENER_ORIGIN_FIELD_EVIDENCE_REQUIREMENTS,
       attackPath: NODE_ANGULAR_HOST_LISTENER_ORIGIN_FIELD_EVIDENCE_REQUIREMENTS,
+    },
+  ],
+  [
+    "node-browser-postmessage-wildcard-sensitive-data",
+    {
+      validation:
+        NODE_BROWSER_POSTMESSAGE_DISCLOSURE_FIELD_EVIDENCE_REQUIREMENTS,
+      attackPath:
+        NODE_BROWSER_POSTMESSAGE_DISCLOSURE_FIELD_EVIDENCE_REQUIREMENTS,
     },
   ],
   [
@@ -5245,6 +5268,7 @@ export async function buildResidualRiskInventory(
   records.push(...nodeFastifyOpenRedirectRecords(sourceFiles));
   records.push(...nodeVueRouterClientRequestForgeryRecords(sourceFiles));
   records.push(...nodeAngularHostListenerMissingOriginRecords(sourceFiles));
+  records.push(...nodeBrowserPostMessageDisclosureRecords(sourceFiles));
   records.push(...nodePlateMediaEmbedXssRecords(sourceFiles));
   records.push(...nodeDefuddleExtractorXssRecords(sourceFiles));
   records.push(...nodePickemTerminalInjectionRecords(sourceFiles));
@@ -26987,6 +27011,399 @@ function nodeAngularHostListenerMissingOriginRecords(
         });
         if (records.length >= MAX_FRAMEWORK_CROSS_FILE_RECORDS) return records;
       }
+    }
+  }
+  return records;
+}
+
+interface NodeBrowserSensitiveSource {
+  kind: "browser-sensitive-cookie" | "browser-sensitive-storage";
+  line: number;
+  symbol: string;
+}
+
+interface NodeBrowserWindowTarget {
+  kind: "navigable-window" | "opened-window";
+  line: number;
+  symbol: string;
+}
+
+interface NodeBrowserWildcardOrigin {
+  kind: "options-target-origin" | "positional-target-origin";
+  line: number;
+}
+
+function nodeBrowserGlobalIsStable(
+  lines: readonly string[],
+  identifier:
+    | "document"
+    | "globalThis"
+    | "localStorage"
+    | "opener"
+    | "parent"
+    | "sessionStorage"
+    | "top"
+    | "window",
+): boolean {
+  if (
+    importedJavascriptSymbols(lines).some(({ local }) => local === identifier)
+  ) {
+    return false;
+  }
+  const escaped = escapeRegularExpression(identifier);
+  const structural = javascriptStructuralLines(lines).join("\n");
+  return !new RegExp(
+    String.raw`(?:^|[;{}]\s*|\n\s*)(?:(?:export\s+)?(?:const|let|var|function|class)\s+${escaped}\b|${escaped}\s*=(?!=|>))|(?:function\b[^()]*\(|\()[^()]*\b${escaped}\b[^()]*\)\s*(?:=>|\{)|(?:^|[=,:]\s*)${escaped}\s*(?::[^=,]+)?=>|\bcatch\s*\(\s*${escaped}\b`,
+    "mu",
+  ).test(structural);
+}
+
+function nodeBrowserSensitiveStorageKey(key: string): boolean {
+  const normalized = key
+    .replace(/([a-z0-9])([A-Z])/gu, "$1_$2")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/gu, "_");
+  return /(?:^|_)(?:(?:access|refresh|id|session)_?token|token|jwt|secret|password|passwd|credential|authorization|api_?key|private_?key|session(?:_?id)?)(?:_|$)/u.test(
+    normalized,
+  );
+}
+
+function nodeBrowserSensitiveSource(
+  lines: readonly string[],
+  expression: string,
+  line: number,
+  depth = 0,
+  seen: ReadonlySet<string> = new Set(),
+): NodeBrowserSensitiveSource | undefined {
+  let value = expression.trim();
+  if (value === "" || depth > 10) return undefined;
+  while (value.startsWith("(") && value.endsWith(")")) {
+    const close = matchingCallParenthesis(value, 0);
+    if (close !== value.length - 1) break;
+    value = value.slice(1, -1).trim();
+  }
+  const identifier = /^([A-Za-z_$][\w$]*)$/u.exec(value)?.[1];
+  if (identifier !== undefined) {
+    if (seen.has(identifier)) return undefined;
+    const initializer = javascriptVariableInitializer(lines, identifier, line);
+    if (initializer === undefined) return undefined;
+    return nodeBrowserSensitiveSource(
+      lines,
+      initializer.value,
+      initializer.line,
+      depth + 1,
+      new Set([...seen, identifier]),
+    );
+  }
+  const storage =
+    /^(?:(window|globalThis)\s*\.\s*)?(localStorage|sessionStorage)\s*\.\s*getItem\s*\(\s*(["'`])([^"'`]+)\3\s*\)$/u.exec(
+      value,
+    );
+  if (
+    storage?.[2] !== undefined &&
+    storage[4] !== undefined &&
+    nodeBrowserSensitiveStorageKey(storage[4]) &&
+    (storage[1] === undefined
+      ? nodeBrowserGlobalIsStable(
+          lines,
+          storage[2] as "localStorage" | "sessionStorage",
+        )
+      : nodeBrowserGlobalIsStable(lines, storage[1] as "globalThis" | "window"))
+  ) {
+    return {
+      kind: "browser-sensitive-storage",
+      line,
+      symbol: `${storage[2]}.getItem(${storage[4]})`,
+    };
+  }
+  const cookie =
+    /^(?:(window|globalThis)\s*\.\s*)?document\s*\.\s*cookie$/u.exec(value);
+  if (
+    cookie !== null &&
+    nodeBrowserGlobalIsStable(
+      lines,
+      cookie[1] === "window" || cookie[1] === "globalThis"
+        ? cookie[1]
+        : "document",
+    )
+  ) {
+    return {
+      kind: "browser-sensitive-cookie",
+      line,
+      symbol: "document.cookie",
+    };
+  }
+  const composite: JavascriptResolvedExpression = { line, value };
+  for (const property of javascriptObjectEntries(composite)) {
+    const source = nodeBrowserSensitiveSource(
+      lines,
+      property.value,
+      property.line,
+      depth + 1,
+      seen,
+    );
+    if (source !== undefined) return source;
+  }
+  for (const element of javascriptArrayEntries(composite)) {
+    const source = nodeBrowserSensitiveSource(
+      lines,
+      element.value,
+      element.line,
+      depth + 1,
+      seen,
+    );
+    if (source !== undefined) return source;
+  }
+  const transparent =
+    /^(?:JSON\s*\.\s*stringify|String|btoa|encodeURIComponent)\s*\(/u.exec(
+      value,
+    );
+  if (transparent !== null) {
+    const open = value.indexOf("(", transparent.index);
+    const close = matchingCallParenthesis(value, open);
+    if (open >= 0 && close === value.length - 1) {
+      const arguments_ = splitJavascriptArguments(value.slice(open + 1, close));
+      if (arguments_.length === 1) {
+        const source = nodeBrowserSensitiveSource(
+          lines,
+          arguments_[0]!,
+          line,
+          depth + 1,
+          seen,
+        );
+        if (source !== undefined) return source;
+      }
+    }
+  }
+  if (value.startsWith("`") && value.endsWith("`")) {
+    for (const interpolation of value.matchAll(/\$\{([^{}]+)\}/gu)) {
+      if (interpolation[1] === undefined) continue;
+      const source = nodeBrowserSensitiveSource(
+        lines,
+        interpolation[1],
+        line,
+        depth + 1,
+        seen,
+      );
+      if (source !== undefined) return source;
+    }
+  }
+  const concatenation =
+    /^(?:["'][^"']*["']\s*\+\s*)?([A-Za-z_$][\w$]*)(?:\s*\+\s*["'][^"']*["'])?$/u.exec(
+      value,
+    );
+  if (concatenation?.[1] !== undefined && concatenation[1] !== value) {
+    return nodeBrowserSensitiveSource(
+      lines,
+      concatenation[1],
+      line,
+      depth + 1,
+      seen,
+    );
+  }
+  return undefined;
+}
+
+function nodeBrowserWildcardLiteral(value: string): boolean {
+  return /^(?:["']\*["']|`\*`)$/u.test(value.trim());
+}
+
+function nodeBrowserWildcardOrigin(
+  lines: readonly string[],
+  arguments_: readonly string[],
+  sinkLine: number,
+): NodeBrowserWildcardOrigin | undefined {
+  if (arguments_.length < 2) return undefined;
+  const second = resolveJavascriptExpression(lines, arguments_[1]!, sinkLine);
+  if (second === undefined) return undefined;
+  if (nodeBrowserWildcardLiteral(second.value)) {
+    return { kind: "positional-target-origin", line: second.line };
+  }
+  if (/\.\.\./u.test(second.value)) return undefined;
+  const origins = javascriptObjectEntries(second).filter(
+    ({ key }) => key === "targetOrigin",
+  );
+  if (origins.length !== 1) return undefined;
+  const origin = resolveJavascriptExpression(
+    lines,
+    origins[0]!.value,
+    origins[0]!.line,
+  );
+  return origin !== undefined && nodeBrowserWildcardLiteral(origin.value)
+    ? { kind: "options-target-origin", line: origin.line }
+    : undefined;
+}
+
+function nodeBrowserWindowTarget(
+  lines: readonly string[],
+  receiverExpression: string,
+  sinkLine: number,
+): NodeBrowserWindowTarget | undefined {
+  const receiver = receiverExpression.replace(/\s+/gu, "");
+  const direct = /^(window|globalThis)\.(parent|top|opener)$/u.exec(receiver);
+  if (
+    direct?.[1] !== undefined &&
+    direct[2] !== undefined &&
+    nodeBrowserGlobalIsStable(lines, direct[1] as "globalThis" | "window")
+  ) {
+    return { kind: "navigable-window", line: sinkLine, symbol: receiver };
+  }
+  if (
+    /^(?:parent|top|opener)$/u.test(receiver) &&
+    nodeBrowserGlobalIsStable(lines, receiver as "opener" | "parent" | "top")
+  ) {
+    return {
+      kind: "navigable-window",
+      line: sinkLine,
+      symbol: `window.${receiver}`,
+    };
+  }
+  if (!/^[A-Za-z_$][\w$]*$/u.test(receiver)) return undefined;
+  const initializer = javascriptVariableInitializer(lines, receiver, sinkLine);
+  if (initializer === undefined) return undefined;
+  const value = initializer.value.replace(/\s+/gu, "");
+  const assignedTarget = /^(window|globalThis)\.(parent|top|opener)$/u.exec(
+    value,
+  );
+  if (
+    assignedTarget?.[1] !== undefined &&
+    assignedTarget[2] !== undefined &&
+    nodeBrowserGlobalIsStable(
+      lines,
+      assignedTarget[1] as "globalThis" | "window",
+    )
+  ) {
+    return {
+      kind: "navigable-window",
+      line: initializer.line,
+      symbol: assignedTarget[0],
+    };
+  }
+  if (
+    /^(?:parent|top|opener)$/u.test(value) &&
+    nodeBrowserGlobalIsStable(lines, value as "opener" | "parent" | "top")
+  ) {
+    return {
+      kind: "navigable-window",
+      line: initializer.line,
+      symbol: `window.${value}`,
+    };
+  }
+  if (
+    /^(?:window|globalThis)\.open\s*\(/u.test(value) &&
+    nodeBrowserGlobalIsStable(
+      lines,
+      value.startsWith("window") ? "window" : "globalThis",
+    )
+  ) {
+    return { kind: "opened-window", line: initializer.line, symbol: receiver };
+  }
+  return undefined;
+}
+
+function nodeBrowserPostMessageDisclosureRecords(
+  files: readonly SourceFileSnapshot[],
+): ResidualRiskRecord[] {
+  const records: ResidualRiskRecord[] = [];
+  const callee =
+    /(?<receiver>(?:window|globalThis)\s*\.\s*(?:parent|top|opener)|[A-Za-z_$][\w$]*)\s*(?:\?\s*\.\s*|\.\s*)postMessage\s*\(/u;
+  for (const file of files) {
+    if (
+      !JAVASCRIPT_EXTENSIONS.has(file.extension) ||
+      file.extension === ".vue" ||
+      javascriptTestOrExamplePath(file.path) ||
+      !file.text.includes("postMessage")
+    ) {
+      continue;
+    }
+    const original = javascriptCodeLinesWithoutComments(file.lines).join("\n");
+    const structural = javascriptStructuralLines(file.lines).join("\n");
+    for (const call of javascriptCallsInText(original, structural, 1, callee)) {
+      const matched = new RegExp(`^${callee.source}`, "u").exec(
+        structural.slice(call.start),
+      );
+      const receiver = matched?.groups?.["receiver"];
+      if (receiver === undefined) continue;
+      const target = nodeBrowserWindowTarget(file.lines, receiver, call.line);
+      const wildcard = nodeBrowserWildcardOrigin(
+        file.lines,
+        call.arguments,
+        call.line,
+      );
+      const source = nodeBrowserSensitiveSource(
+        file.lines,
+        call.arguments[0] ?? "",
+        call.line,
+      );
+      if (
+        target === undefined ||
+        wildcard === undefined ||
+        source === undefined
+      ) {
+        continue;
+      }
+      const startLine = Math.max(
+        1,
+        Math.min(source.line, target.line, wildcard.line, call.line) -
+          CONTEXT_LINES_BEFORE,
+      );
+      const finishLine = Math.min(
+        file.lines.length,
+        call.line + CONTEXT_LINES_AFTER + 6,
+      );
+      records.push({
+        path: file.path,
+        line: call.line,
+        categories: [
+          "framework-dataflow:node-browser-postmessage-wildcard-sensitive-data",
+          `modeled-source:${source.kind}`,
+          "modeled-sink:cross-window-wildcard-postmessage",
+        ],
+        priority: 110,
+        startLine,
+        endLine: finishLine,
+        excerpt: sourceExcerpt(file.lines, startLine, finishLine),
+        sourceExcerpt: sourceExcerpt(
+          file.lines,
+          source.line,
+          Math.min(file.lines.length, call.line + 6),
+        ),
+        frameworkModel: {
+          schemaVersion: "1.2",
+          id: "node-browser-postmessage-wildcard-sensitive-data",
+          language: "javascript-typescript",
+          scope: "same-file",
+          source: { kind: source.kind, path: file.path, line: source.line },
+          sink: {
+            kind: "cross-window-wildcard-postmessage",
+            path: file.path,
+            line: call.line,
+            cweIds: ["CWE-201", "CWE-359"],
+          },
+          propagators: [
+            {
+              kind: "browser-sensitive-value",
+              path: file.path,
+              line: source.line,
+              symbol: source.symbol,
+            },
+            {
+              kind: "browser-window-target",
+              path: file.path,
+              line: target.line,
+              symbol: `${target.kind}:${target.symbol}`,
+            },
+            {
+              kind: "postmessage-wildcard-target-origin",
+              path: file.path,
+              line: wildcard.line,
+              symbol: wildcard.kind,
+            },
+          ],
+          candidateControls: [],
+        },
+      });
+      if (records.length >= MAX_FRAMEWORK_CROSS_FILE_RECORDS) return records;
     }
   }
   return records;

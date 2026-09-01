@@ -715,6 +715,10 @@ describe("effectiveness benchmark", () => {
         "node-angular-host-listener-exact-origin-check",
       ],
       [
+        "node-browser-postmessage-wildcard-sensitive-data",
+        "node-browser-postmessage-fixed-origin-sensitive-data",
+      ],
+      [
         "python-flask-post-open-redirect",
         "python-flask-post-safe-local-redirect",
       ],

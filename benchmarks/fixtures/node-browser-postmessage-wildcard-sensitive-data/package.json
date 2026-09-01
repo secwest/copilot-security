@@ -1,0 +1,8 @@
+{
+  "name": "node-browser-postmessage-wildcard-sensitive-data",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "witness": "node examples/witness.mjs"
+  }
+}

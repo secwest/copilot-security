@@ -2,6 +2,108 @@
 
 This log records consequential implementation decisions, their evidence, and the tradeoffs that future scanner work must preserve.
 
+## 2026-08-31 — Bound sensitive browser messages to exact receiver origins
+
+**Measured gap and comparator.** A minimal production JavaScript bridge read
+the credential-shaped Web Storage key `access_token` and sent the resulting
+object to its navigable parent window with wildcard `targetOrigin`. The
+unchanged deterministic scanner emitted no specialized row, so the focused
+exploit/control regression failed with zero records before implementation.
+CodeQL's high-precision
+[`js/cross-window-information-leak`](https://codeql.github.com/codeql-query-help/javascript/js-cross-window-information-leak/)
+query classifies sensitive information sent through wildcard `postMessage` as
+CWE-201/CWE-359. Its maintained
+[`PostMessageStar.ql`](https://github.com/github/codeql/blob/main/javascript/ql/src/Security/CWE-201/PostMessageStar.ql)
+and
+[`PostMessageStarCustomizations.qll`](https://raw.githubusercontent.com/github/codeql/main/javascript/ql/lib/semmle/javascript/security/dataflow/PostMessageStarCustomizations.qll)
+define the sink as a method named `postMessage` whose second positional
+argument is literal `"*"`. MDN's
+[`Window.postMessage` guidance](https://developer.mozilla.org/en-US/docs/Web/API/Window/postMessage)
+requires an exact target origin for confidential data, documents the modern
+options overload, explains that omission defaults to the caller's origin, and
+notes that a navigable receiver can change location between reference capture
+and message delivery.
+
+**Typed decision.** Emit
+`node-browser-postmessage-wildcard-sensitive-data` only for production
+JavaScript or TypeScript with all four boundaries proven: a credential-shaped
+literal key passed to `localStorage.getItem` or `sessionStorage.getItem`, or a
+`document.cookie` read; a bounded payload flow through stable locals,
+object/array construction, template/fixed-string concatenation,
+`JSON.stringify`, `String`, `btoa`, or `encodeURIComponent`; an exact navigable
+Window relationship through `parent`, `top`, `opener`, or a `window.open`
+result; and a literal wildcard in positional argument one or modern
+`{ targetOrigin: "*" }` options. Source, key/cookie, flow, receiver, call,
+overload, wildcard origin, and CWE provenance are preserved as structured
+evidence.
+
+**Precision improvement over the comparator.** The scanner adds the modern
+options overload and requires the receiver to be a navigable Window rather
+than accepting every method called `postMessage`. Arbitrary objects, Worker,
+MessagePort, and browser-global lookalikes are rejected. Unqualified
+`parent`/`top`/`opener` and `document` are accepted only when unshadowed;
+qualified `window`/`globalThis` members retain their own binding identity.
+Stable receiver, source, payload, and options aliases are invalidated by later
+assignment. Fixed origins and omitted origins are controls; dynamic origins,
+spreads, and computed shapes that do not prove a literal wildcard fail closed.
+Only credential-shaped storage keys are sensitive, while every cookie string
+is treated as potentially confidential. Encoding and base64 are correctly
+modeled as representation changes, not protection. Tests, examples, and Vue
+single-file components remain outside this bounded model.
+
+**Reviewer and benchmark contract.** The reviewer must reopen and name the
+exact source and key/cookie, every material payload transition, receiver
+relationship, overload, literal wildcard, and the cross-origin
+embedding/navigation precondition. It must carry CWE-201/CWE-359 through
+validation and attack-path analysis. It may not infer that an attacker actually
+received the message, that a token remains valid or reusable, account takeover,
+public reachability, or compromise without separate code or deployment
+evidence. The paired fixtures share one topology and differ only at the origin
+boundary. Their in-memory witnesses perform no browser or network I/O: the
+wildcard case delivers one bounded payload to an attacker-origin parent, while
+the exact-origin control delivers none and still succeeds for the trusted
+portal. The specialized manifest gates perfect precision, recall, stability,
+narrative quality, code evidence, and zero false positives. The canonical
+corpus now contains 209 pairs, 418 cases, and 1,254 repeated scan positions.
+
+**Regression and acceptance evidence.** Nine focused tests cover positional and
+options overloads; cookie and Web Storage sources; parent, top, opener, and
+popup receivers; direct, aliased, nested, serialized, encoded, and base64
+payloads; fixed, omitted, dynamic, and spread origins; reassignment;
+non-sensitive keys; object/Worker/MessagePort lookalikes; function, arrow, and
+global shadows; test/example exclusion; model narrative; and reviewer
+instructions. The adjacent model, benchmark-integrity, and corpus-count lane
+passes 44 tests with 3,004 assertions. Both witnesses pass. The complete native
+Windows lane records 2,262 passes, 31 intentional platform/real-service skips,
+and 17,483 assertions across 2,296 tests and 223 files in 1,092.66 seconds. Two
+managed-sandbox failures are the required temporary-Git and private-home ACL
+boundaries; both pass in an exact native rerun. The lone 60-second model timeout
+under whole-suite contention passes alone in 38.44 seconds. Formatting,
+generated-model drift, TypeScript, the production build, and the production
+advisory audit pass.
+
+Two independent 299-entry npm archives are byte-identical at 2,538,575 bytes
+with SHA-256
+`198ba6b8c8b26ed338a1ca602002d860a6bc4dbeaa1a9fee222a1cbe4d2c9695`.
+Separate isolated installs validate 67 production packages, public import, the
+executable CLI, and all 79 bundled plugin files. Two whole-repository compiled
+inventories are byte-identical at 256 rows and 639,665 bytes with SHA-256
+`b37b6de99902ac9c3484372005ea9fe1c42cc6599622ddef006806509a9487f9`.
+They contain exactly one postMessage disclosure row at the exploit's storage
+source line 3 and call sink line 4; the exact-origin control is absent.
+
+Windows builds without warnings/errors, passes 7/7 core and 3/3 shared desktop
+tests, and publishes a 346,796-byte executable with SHA-256
+`48c0ccceb0a5123bfce303462fd6a454f4c457cbbc470ea9958282cfa290cf76`.
+Ubuntu/WSL restores the locked graph, builds without warnings/errors, passes the
+same suites plus 2/2 headless Avalonia checks under a Linux-only executable
+path, and passes non-graphical plus X11/Xvfb startup. The inherited Windows
+`node.exe` path is deliberately rejected with `Exec format error` before that
+clean rerun. The 72,568-byte Linux executable has SHA-256
+`7e29d642169a6c218c249216c6c10648307aea88faf636b69ac25741104b4adf`.
+Hosted evidence follows the implementation checkpoint. The continuing scanner
+effectiveness goal remains active.
+
 ## 2026-08-31 — Authenticate Angular global HostListener message senders
 
 **Measured gap and comparator.** A minimal Angular 20 component imported the

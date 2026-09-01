@@ -6,6 +6,72 @@ All notable scanner, application, benchmark, and operational changes are recorde
 
 ### Scanner effectiveness
 
+- Closed a measured browser `postMessage` sensitive-data disclosure false
+  negative. The unchanged scanner emitted no structured row when production
+  JavaScript read the credential-shaped `localStorage` key `access_token` and
+  sent the resulting object to a navigable parent window with wildcard
+  `targetOrigin`; the focused regression failed with zero records before the
+  model was added. The matched exact-origin control remained unreported.
+- Added the bounded
+  `node-browser-postmessage-wildcard-sensitive-data` model with CWE-201 and
+  CWE-359 evidence. It requires a credential-shaped Web Storage key or
+  `document.cookie`, bounded source-to-payload flow, an exact navigable Window
+  receiver (`parent`, `top`, `opener`, or a `window.open` result), and a proven
+  wildcard origin. Both positional `"*"` and the modern
+  `{ targetOrigin: "*" }` overload are modeled, including stable local aliases.
+- Treats object/array construction, template and fixed-string concatenation,
+  `JSON.stringify`, `String`, `btoa`, and `encodeURIComponent` as
+  confidentiality-preserving dataflow rather than protection. Stable
+  assignments are accepted only while unreassigned. Fixed origins, omitted
+  origins, dynamic origins not proven to be wildcard, spread-built options,
+  non-sensitive storage keys, arbitrary `postMessage` objects, `Worker`,
+  `MessagePort`, browser-global lookalikes/shadows, tests, and examples fail
+  closed.
+- The reviewer must reopen the exact storage key or cookie read, payload flow,
+  Window relationship, overload, wildcard origin, and cross-origin
+  embedding/navigation precondition. It must not infer attacker receipt,
+  credential validity or reuse, account takeover, public reachability, or
+  compromise without separate evidence. This is narrower than the maintained
+  CodeQL sink boundary while adding the modern options overload.
+- Added a topology-matched exploit/control pair and offline in-memory witnesses.
+  The exploit delivers one bounded token payload to an attacker-origin parent;
+  the exact-origin control delivers none while still delivering to the trusted
+  portal. The specialized manifest requires perfect precision, recall,
+  stability, code evidence, narrative quality, and zero false positives. The
+  canonical benchmark advances to 209 pairs, 418 cases, and 1,254 repeated scan
+  positions.
+- Nine focused tests cover both overloads; cookie and storage sources;
+  parent/top/opener/popup receivers; direct, aliased, nested, serialized,
+  encoded, and base64 payloads; fixed, omitted, dynamic, and spread origins;
+  reassignment; non-sensitive keys; object/Worker/MessagePort lookalikes;
+  browser-global shadows; path exclusions; narrative quality; and reviewer
+  instructions. The adjacent model, benchmark-integrity, and corpus-count lane
+  passes 44 tests with 3,004 assertions, and both witnesses pass.
+- The complete Windows lane records 2,262 passes, 31 intentional
+  platform/real-service skips, 17,483 assertions, and three first-pass failures
+  across 2,296 tests and 223 files in 1,092.66 seconds. The temporary-Git and
+  private-home ACL checks pass when rerun at their required native boundary;
+  the single model timeout under whole-suite contention passes in isolation in
+  38.44 seconds. Formatting, generated-model drift, TypeScript, the clean
+  production build, and the production advisory audit are green.
+- Two fresh 299-entry npm archives are byte-identical at 2,538,575 bytes with
+  SHA-256
+  `198ba6b8c8b26ed338a1ca602002d860a6bc4dbeaa1a9fee222a1cbe4d2c9695`.
+  Two independent isolated installs validate 67 production packages, public
+  import, the executable CLI, and all 79 bundled plugin files.
+- Two compiled whole-repository inventories are byte-identical at 256 rows and
+  639,665 bytes with SHA-256
+  `b37b6de99902ac9c3484372005ea9fe1c42cc6599622ddef006806509a9487f9`.
+  Exactly one new row identifies the intentional wildcard-origin exploit at
+  source line 3 and sink line 4; the exact-origin control is absent.
+- Windows builds without warnings/errors, passes 7/7 core and 3/3 shared
+  desktop tests, and publishes a 346,796-byte executable with SHA-256
+  `48c0ccceb0a5123bfce303462fd6a454f4c457cbbc470ea9958282cfa290cf76`.
+  Ubuntu/WSL restores the locked graph, builds without warnings/errors, passes
+  those suites plus 2/2 headless interface tests under a Linux-only executable
+  path, and passes non-graphical and X11/Xvfb startup. Its 72,568-byte
+  executable has SHA-256
+  `7e29d642169a6c218c249216c6c10648307aea88faf636b69ac25741104b4adf`.
 - Closed a measured Angular `HostListener("window:message")` false negative.
   The unchanged scanner emitted no structured row for an active Angular 20
   component that consumed `event.data` from the official global message
