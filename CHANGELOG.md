@@ -41,6 +41,27 @@ All notable scanner, application, benchmark, and operational changes are recorde
   Native strict inspection installs 67 production packages and validates the
   public import, executable CLI, and all 79 bundled plugin files. The live
   production advisory audit reports no known vulnerabilities.
+- A stored-credential `gpt-5.6-sol` high-reasoning deep self-scan of all 22
+  changed paths in tracked-only checkpoint `d18be9a` completed in 99m13s. The
+  4,215-file source archive has SHA-256
+  `a759678b47f5405d1f2e656288a04fa2f47abfc2414a94478080cc99f929975b`.
+  Four isolated sessions exhausted bounded safety-filter rewrites; session 5/5
+  produced acceptable artifacts and the deterministic workbench recovered the
+  completed scan after the response stream ended. This exercised the recovery
+  ceiling without an authentication, quota, AI-credit, rate-limit, or provider-
+  resource failure.
+- The self-scan has `complete` coverage: all 22 immutable inventory rows exactly
+  match 22 coverage surfaces, deferred work is empty, and all 13 sealed artifact
+  hashes match independent SHA-256 calculations. It rejected 8 of 9 candidates
+  and retained exactly the intentional high CWE-22 finding in the vulnerable
+  Express benchmark fixture; the fixed-root sibling and production scanner code
+  remain unreported. The run used 28,339,482 input tokens (24,013,100 cached),
+  361,510 output tokens, and an estimated $49.88484.
+- Checkpoint `d18be9a` passes every hosted workflow family: Node
+  `33570944097`, container `33570943985`, Windows GUI `33570944054`, Linux GUI
+  `33570943983`, .NET `33570944021`, Go `33570943971`, Java `33570944053`,
+  Kotlin `33570944070`, PHP `33570943989`, Ruby `33570944059`, and Rust
+  `33570944074`.
 - Closed a measured Express authorization false negative. Before the new model,
   a production-shaped route that extracted a Bearer token, called official
   `jsonwebtoken.decode`, trusted its `role` claim, and returned protected data

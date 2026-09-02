@@ -61,6 +61,46 @@ Native strict inspection installs 67 production packages and validates the
 public import, executable CLI, and all 79 bundled plugin files. The live
 production advisory audit reports no known vulnerabilities.
 
+**Exact-checkpoint self-scan.** Build a tracked-only 4,215-file archive of
+public checkpoint `d18be9a`; its SHA-256 is
+`a759678b47f5405d1f2e656288a04fa2f47abfc2414a94478080cc99f929975b`.
+Select exactly the 22 changed paths, stored Copilot credentials,
+`gpt-5.6-sol`, high reasoning, deep mode, five total sessions, zero reachable-
+history depth, and no AI-credit or cost ceiling. Session 1 produces the threat
+model and five discovery-pass ledgers before exhausting all bounded safety
+forms. Session 2 completes the sixth systems pass, centralized discovery,
+residual sweep, validation, attack-path analysis, and all three canonical
+drafts before the same classifier condition. Sessions 3 and 4 also exhaust
+their bounded defensive forms. Session 5 produces acceptable artifacts; when
+its response stream ends, deterministic complete-draft recovery validates and
+seals them. The run completes in 99m13s. This is direct evidence of persistent
+classifier instability and successful bounded recovery, not authentication,
+quota, AI-credit, rate-limit, or provider-resource exhaustion.
+
+Independent verification matches all 13 sealed artifact hashes. The 22
+immutable inventory rows exactly equal the 22 coverage surfaces, completeness
+is `complete`, and deferred work is empty. Of nine candidates, eight are
+rejected and exactly one remains: the intended high CWE-22 finding in
+`benchmarks/fixtures/node-express-sendfile-path-disclosure/src/server.js`. The
+topology-matched fixed-root sibling and production scanner code remain absent.
+The scanner re-anchors five code-evidence excerpts from authoritative
+repository bytes instead of trusting model text. It uses 28,339,482 input
+tokens (24,013,100 cached), 361,510 output tokens, and an estimated $49.88484.
+
+**Hosted closure.** Every workflow family passes on `d18be9a`: [Node
+`33570944097`](https://github.com/secwest/copilot-security/actions/runs/33570944097),
+[container `33570943985`](https://github.com/secwest/copilot-security/actions/runs/33570943985),
+[Windows GUI `33570944054`](https://github.com/secwest/copilot-security/actions/runs/33570944054),
+[Linux GUI `33570943983`](https://github.com/secwest/copilot-security/actions/runs/33570943983),
+[.NET `33570944021`](https://github.com/secwest/copilot-security/actions/runs/33570944021),
+[Go `33570943971`](https://github.com/secwest/copilot-security/actions/runs/33570943971),
+[Java `33570944053`](https://github.com/secwest/copilot-security/actions/runs/33570944053),
+[Kotlin `33570944070`](https://github.com/secwest/copilot-security/actions/runs/33570944070),
+[PHP `33570943989`](https://github.com/secwest/copilot-security/actions/runs/33570943989),
+[Ruby `33570944059`](https://github.com/secwest/copilot-security/actions/runs/33570944059),
+and [Rust `33570944074`](https://github.com/secwest/copilot-security/actions/runs/33570944074).
+The scanner-effectiveness goal remains active.
+
 ## 2026-09-01 — Retry provider resource loss only after complete drafts
 
 **The self-scan exercised two independent failure layers.** The immutable
